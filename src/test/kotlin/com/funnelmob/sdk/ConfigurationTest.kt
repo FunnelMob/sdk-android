@@ -8,13 +8,11 @@ class ConfigurationTest {
     @Test
     fun `configuration has correct defaults`() {
         val config = FunnelMobConfiguration(
-            appId = "com.test.app",
             apiKey = "fm_test_key"
         )
 
-        assertEquals("com.test.app", config.appId)
         assertEquals("fm_test_key", config.apiKey)
-        assertEquals(FunnelMobConfiguration.Environment.PRODUCTION, config.environment)
+        assertEquals(FunnelMobConfiguration.Server.PRODUCTION, config.server)
         assertEquals(FunnelMobConfiguration.LogLevel.NONE, config.logLevel)
         assertEquals(30_000L, config.flushIntervalMs)
         assertEquals(100, config.maxBatchSize)
@@ -23,16 +21,15 @@ class ConfigurationTest {
     @Test
     fun `builder sets all properties`() {
         val config = FunnelMobConfiguration.Builder(
-            appId = "com.test.app",
             apiKey = "fm_test_key"
         )
-            .environment(FunnelMobConfiguration.Environment.SANDBOX)
+            .server(FunnelMobConfiguration.Server.SANDBOX)
             .logLevel(FunnelMobConfiguration.LogLevel.DEBUG)
             .flushInterval(10_000L)
             .maxBatchSize(50)
             .build()
 
-        assertEquals(FunnelMobConfiguration.Environment.SANDBOX, config.environment)
+        assertEquals(FunnelMobConfiguration.Server.SANDBOX, config.server)
         assertEquals(FunnelMobConfiguration.LogLevel.DEBUG, config.logLevel)
         assertEquals(10_000L, config.flushIntervalMs)
         assertEquals(50, config.maxBatchSize)
@@ -41,7 +38,6 @@ class ConfigurationTest {
     @Test
     fun `flush interval minimum is enforced`() {
         val config = FunnelMobConfiguration.Builder(
-            appId = "com.test.app",
             apiKey = "fm_test_key"
         )
             .flushInterval(500L) // Below minimum
@@ -53,14 +49,12 @@ class ConfigurationTest {
     @Test
     fun `max batch size is clamped`() {
         val configLow = FunnelMobConfiguration.Builder(
-            appId = "com.test.app",
             apiKey = "fm_test_key"
         )
             .maxBatchSize(0)
             .build()
 
         val configHigh = FunnelMobConfiguration.Builder(
-            appId = "com.test.app",
             apiKey = "fm_test_key"
         )
             .maxBatchSize(200)
@@ -71,14 +65,14 @@ class ConfigurationTest {
     }
 
     @Test
-    fun `production environment has correct URL`() {
-        val env = FunnelMobConfiguration.Environment.PRODUCTION
-        assertEquals("https://api.funnelmob.com/v1", env.baseUrl)
+    fun `production server has correct URL`() {
+        val server = FunnelMobConfiguration.Server.PRODUCTION
+        assertEquals("https://api.funnelmob.com/v1", server.baseUrl)
     }
 
     @Test
-    fun `sandbox environment has correct URL`() {
-        val env = FunnelMobConfiguration.Environment.SANDBOX
-        assertEquals("https://sandbox.funnelmob.com/v1", env.baseUrl)
+    fun `sandbox server has correct URL`() {
+        val server = FunnelMobConfiguration.Server.SANDBOX
+        assertEquals("https://sandbox.funnelmob.com/v1", server.baseUrl)
     }
 }

@@ -44,7 +44,7 @@ object FunnelMob {
         this.deviceInfo = DeviceInfo(appContext)
 
         Logger.logLevel = configuration.logLevel
-        Logger.info("FunnelMob initialized for app: ${configuration.appId}")
+        Logger.info("FunnelMob initialized")
 
         isInitialized = true
         startSession()

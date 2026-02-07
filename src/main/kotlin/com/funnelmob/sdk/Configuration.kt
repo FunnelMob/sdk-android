@@ -4,14 +4,11 @@ package com.funnelmob.sdk
  * Configuration options for the FunnelMob SDK
  */
 data class FunnelMobConfiguration(
-    /** Application identifier (e.g., package name) */
-    val appId: String,
-
     /** API key for authentication */
     val apiKey: String,
 
-    /** Environment (production or sandbox) */
-    val environment: Environment = Environment.PRODUCTION,
+    /** Server (production or sandbox) */
+    val server: Server = Server.PRODUCTION,
 
     /** Log level for debugging */
     val logLevel: LogLevel = LogLevel.NONE,
@@ -24,9 +21,9 @@ data class FunnelMobConfiguration(
 ) {
 
     /**
-     * Environment options
+     * Server options
      */
-    enum class Environment(val baseUrl: String) {
+    enum class Server(val baseUrl: String) {
         PRODUCTION("https://api.funnelmob.com/v1"),
         SANDBOX("https://sandbox.funnelmob.com/v1")
     }
@@ -47,15 +44,14 @@ data class FunnelMobConfiguration(
      * Builder for FunnelMobConfiguration
      */
     class Builder(
-        private val appId: String,
         private val apiKey: String
     ) {
-        private var environment = Environment.PRODUCTION
+        private var server = Server.PRODUCTION
         private var logLevel = LogLevel.NONE
         private var flushIntervalMs = 30_000L
         private var maxBatchSize = 100
 
-        fun environment(env: Environment) = apply { environment = env }
+        fun server(server: Server) = apply { this.server = server }
 
         fun logLevel(level: LogLevel) = apply { logLevel = level }
 
@@ -68,9 +64,8 @@ data class FunnelMobConfiguration(
         }
 
         fun build() = FunnelMobConfiguration(
-            appId = appId,
             apiKey = apiKey,
-            environment = environment,
+            server = server,
             logLevel = logLevel,
             flushIntervalMs = flushIntervalMs,
             maxBatchSize = maxBatchSize

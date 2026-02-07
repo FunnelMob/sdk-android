@@ -36,7 +36,7 @@ internal class NetworkClient {
         deviceId: String,
         configuration: FunnelMobConfiguration
     ): Result<Unit> {
-        val url = URL("${configuration.environment.baseUrl}/events")
+        val url = URL("${configuration.server.baseUrl}/events")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -80,7 +80,7 @@ internal class NetworkClient {
         }
 
         return JSONObject().apply {
-            put("app_id", configuration.appId)
+            put("platform", "android")
             put("device_id", deviceId)
             put("events", eventsArray)
         }
