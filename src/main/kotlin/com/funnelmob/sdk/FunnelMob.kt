@@ -260,15 +260,21 @@ object FunnelMob {
         val context = deviceInfo.toContext()
         val payload = JSONObject().apply {
             put("device_id", deviceInfo.deviceId)
+            put("session_id", UUID.randomUUID().toString())
             put("platform", "android")
+            put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date()))
             put("is_first_session", true)
-            put("os_version", context.osVersion)
-            put("device_model", context.deviceModel)
-            put("language", context.locale)
-            put("timezone", context.timezone)
-            put("screen_width", context.screenWidth)
-            put("screen_height", context.screenHeight)
             referrerToken?.let { put("referrer_token", it) }
+            put("context", JSONObject().apply {
+                put("os_version", context.osVersion)
+                put("device_model", context.deviceModel)
+                put("locale", context.locale)
+                put("timezone", context.timezone)
+                put("screen_width", context.screenWidth)
+                put("screen_height", context.screenHeight)
+            })
         }
 
         networkClient.sendSession(payload, config) { result ->
