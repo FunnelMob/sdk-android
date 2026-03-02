@@ -13,6 +13,63 @@ import java.net.URL
 internal class NetworkClient {
 
     /**
+     * Send a session request and receive attribution result
+     */
+    fun sendSession(
+        payload: JSONObject,
+        configuration: FunnelMobConfiguration,
+        callback: (Result<JSONObject?>) -> Unit
+    ) {
+        Thread {
+            try {
+                val result = sendSessionSync(payload, configuration)
+                callback(result)
+            } catch (e: Exception) {
+                callback(Result.failure(NetworkError.NetworkException(e)))
+            }
+        }.start()
+    }
+
+    private fun sendSessionSync(
+        payload: JSONObject,
+        configuration: FunnelMobConfiguration
+    ): Result<JSONObject?> {
+        val url = URL("${configuration.server.baseUrl}/session")
+        val connection = url.openConnection() as HttpURLConnection
+
+        return try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-FM-API-Key", configuration.apiKey)
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 30_000
+            connection.doOutput = true
+
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(payload.toString())
+                writer.flush()
+            }
+
+            val responseCode = connection.responseCode
+
+            when (responseCode) {
+                in 200..299 -> {
+                    val body = connection.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    Result.success(json)
+                }
+                401 -> Result.failure(NetworkError.Unauthorized)
+                429 -> Result.failure(NetworkError.RateLimited)
+                in 400..499 -> Result.failure(NetworkError.ClientError(responseCode))
+                in 500..599 -> Result.failure(NetworkError.ServerError(responseCode))
+                else -> Result.failure(NetworkError.UnknownError(responseCode))
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /**
      * Send events to the API
      */
     fun sendEvents(

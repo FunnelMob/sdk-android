@@ -10,7 +10,8 @@ internal data class Event(
     val eventName: String,
     val timestamp: String,
     val revenue: EventRevenue?,
-    val parameters: Map<String, Any>?
+    val parameters: Map<String, Any>?,
+    val attributionId: String? = null
 ) {
 
     fun toJson(): JSONObject {
@@ -28,6 +29,10 @@ internal data class Event(
 
             parameters?.let { params ->
                 put("parameters", JSONObject(params))
+            }
+
+            attributionId?.let {
+                put("attribution_id", it)
             }
         }
     }
@@ -49,7 +54,8 @@ internal data class Event(
                 },
                 parameters = paramsJson?.let { obj ->
                     obj.keys().asSequence().associateWith { key -> obj.get(key) }
-                }
+                },
+                attributionId = json.optString("attribution_id", null)
             )
         }
     }
@@ -62,6 +68,51 @@ internal data class EventRevenue(
     val amount: String,
     val currency: String
 )
+
+/**
+ * Attribution result from the server
+ */
+data class AttributionResult(
+    val attributionId: String,
+    val attributed: Boolean,
+    val method: String,
+    val campaignId: String?,
+    val adNetwork: String?,
+    val adGroupId: String?,
+    val adId: String?,
+    val keyword: String?,
+    val confidence: Double
+) {
+    fun toJson(): JSONObject {
+        return JSONObject().apply {
+            put("attribution_id", attributionId)
+            put("attributed", attributed)
+            put("method", method)
+            campaignId?.let { put("campaign_id", it) }
+            adNetwork?.let { put("ad_network", it) }
+            adGroupId?.let { put("ad_group_id", it) }
+            adId?.let { put("ad_id", it) }
+            keyword?.let { put("keyword", it) }
+            put("confidence", confidence)
+        }
+    }
+
+    companion object {
+        fun fromJson(json: JSONObject): AttributionResult {
+            return AttributionResult(
+                attributionId = json.getString("attribution_id"),
+                attributed = json.getBoolean("attributed"),
+                method = json.getString("method"),
+                campaignId = json.optString("campaign_id", null),
+                adNetwork = json.optString("ad_network", null),
+                adGroupId = json.optString("ad_group_id", null),
+                adId = json.optString("ad_id", null),
+                keyword = json.optString("keyword", null),
+                confidence = json.optDouble("confidence", 0.0)
+            )
+        }
+    }
+}
 
 // Extension for public API
 internal fun com.funnelmob.sdk.FunnelMobRevenue.toEventRevenue(): EventRevenue {
