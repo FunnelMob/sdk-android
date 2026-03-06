@@ -185,6 +185,53 @@ internal class NetworkClient {
         }
     }
 
+    /**
+     * Fetch remote config from the API
+     */
+    fun fetchConfig(
+        configuration: FunnelMobConfiguration,
+        callback: (Result<JSONObject>) -> Unit
+    ) {
+        Thread {
+            try {
+                val result = fetchConfigSync(configuration)
+                callback(result)
+            } catch (e: Exception) {
+                callback(Result.failure(NetworkError.NetworkException(e)))
+            }
+        }.start()
+    }
+
+    private fun fetchConfigSync(
+        configuration: FunnelMobConfiguration
+    ): Result<JSONObject> {
+        val url = URL("${configuration.server.baseUrl}/config")
+        val connection = url.openConnection() as HttpURLConnection
+
+        return try {
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("X-FM-API-Key", configuration.apiKey)
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 30_000
+
+            val responseCode = connection.responseCode
+
+            when (responseCode) {
+                in 200..299 -> {
+                    val body = connection.inputStream.bufferedReader().use { it.readText() }
+                    Result.success(JSONObject(body))
+                }
+                401 -> Result.failure(NetworkError.Unauthorized)
+                429 -> Result.failure(NetworkError.RateLimited)
+                in 400..499 -> Result.failure(NetworkError.ClientError(responseCode))
+                in 500..599 -> Result.failure(NetworkError.ServerError(responseCode))
+                else -> Result.failure(NetworkError.UnknownError(responseCode))
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private fun createPayload(
         events: List<Event>,
         deviceId: String,

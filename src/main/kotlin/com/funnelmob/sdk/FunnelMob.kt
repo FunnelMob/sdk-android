@@ -25,6 +25,13 @@ fun interface AttributionCallback {
 }
 
 /**
+ * Callback type for remote config loaded events
+ */
+fun interface ConfigLoadedCallback {
+    fun onConfigLoaded(config: Map<String, Any?>)
+}
+
+/**
  * Main entry point for the FunnelMob SDK
  */
 object FunnelMob {
@@ -38,6 +45,8 @@ object FunnelMob {
     private val attributionCallbacks = mutableListOf<AttributionCallback>()
     private var userId: String? = null
     private var userProperties: MutableMap<String, Any>? = null
+    private var remoteConfig: Map<String, Any?>? = null
+    private val configCallbacks = mutableListOf<ConfigLoadedCallback>()
 
     private lateinit var appContext: Context
     private lateinit var eventQueue: EventQueue
@@ -45,11 +54,16 @@ object FunnelMob {
     private lateinit var deviceInfo: DeviceInfo
     private lateinit var attributionPrefs: SharedPreferences
     private lateinit var userPrefs: SharedPreferences
+    private lateinit var configPrefs: SharedPreferences
 
     private const val ATTRIBUTION_PREFS = "funnelmob_attribution"
     private const val KEY_ATTRIBUTION_RESULT = "attribution_result"
     private const val USER_PREFS = "funnelmob_user"
     private const val KEY_USER_ID = "user_id"
+    private const val CONFIG_PREFS = "funnelmob_config"
+    private const val KEY_CONFIG = "config"
+    private const val KEY_CONFIG_TS = "config_ts"
+    private const val CONFIG_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
     private const val REFERRER_TIMEOUT_SECS = 5L
 
     /**
@@ -72,6 +86,7 @@ object FunnelMob {
         this.deviceInfo = DeviceInfo(appContext)
         this.attributionPrefs = appContext.getSharedPreferences(ATTRIBUTION_PREFS, Context.MODE_PRIVATE)
         this.userPrefs = appContext.getSharedPreferences(USER_PREFS, Context.MODE_PRIVATE)
+        this.configPrefs = appContext.getSharedPreferences(CONFIG_PREFS, Context.MODE_PRIVATE)
 
         Logger.logLevel = configuration.logLevel
         Logger.info("FunnelMob initialized")
@@ -79,6 +94,8 @@ object FunnelMob {
         isInitialized = true
         restoreUserId()
         startSession()
+        loadCachedConfig()
+        fetchRemoteConfig()
     }
 
     /**
@@ -96,6 +113,55 @@ object FunnelMob {
         if (stored != null) {
             callback.onAttribution(stored)
         }
+    }
+
+    // MARK: - Remote Config
+
+    /**
+     * Get a single remote config value by key.
+     *
+     * @param key The config key
+     * @return The value, or null if not found
+     */
+    @JvmStatic
+    fun getConfig(key: String): Any? {
+        return remoteConfig?.get(key)
+    }
+
+    /**
+     * Get a single remote config value with a default.
+     *
+     * @param key The config key
+     * @param default Value to return if key not found
+     * @return The config value or the default
+     */
+    @JvmStatic
+    fun <T> getConfig(key: String, default: T): T {
+        @Suppress("UNCHECKED_CAST")
+        return (remoteConfig?.get(key) as? T) ?: default
+    }
+
+    /**
+     * Get all remote config values.
+     *
+     * @return A copy of all config key-value pairs
+     */
+    @JvmStatic
+    fun getAllConfig(): Map<String, Any?> {
+        return remoteConfig?.toMap() ?: emptyMap()
+    }
+
+    /**
+     * Register a callback that fires when remote config is loaded.
+     * If config has already been loaded, the callback fires immediately.
+     *
+     * @param callback Called with the config map
+     */
+    @JvmStatic
+    fun onConfigLoaded(callback: ConfigLoadedCallback) {
+        configCallbacks.add(callback)
+
+        remoteConfig?.let { callback.onConfigLoaded(it) }
     }
 
     /**
@@ -441,6 +507,65 @@ object FunnelMob {
                 .apply()
         } catch (e: Exception) {
             Logger.warning("Failed to save attribution: ${e.message}")
+        }
+    }
+
+    // MARK: - Remote Config (Private)
+
+    private fun fetchRemoteConfig() {
+        val config = configuration ?: return
+
+        networkClient.fetchConfig(config) { result ->
+            result.onSuccess { json ->
+                val configMap = mutableMapOf<String, Any?>()
+                json.keys().forEach { key ->
+                    configMap[key] = json.opt(key)
+                }
+                remoteConfig = configMap
+                saveCachedConfig(json)
+                Logger.debug("Remote config loaded")
+                notifyConfigCallbacks(configMap)
+            }.onFailure { error ->
+                Logger.error("Failed to fetch remote config: ${error.message}")
+            }
+        }
+    }
+
+    private fun loadCachedConfig() {
+        if (!::configPrefs.isInitialized) return
+        val ts = configPrefs.getLong(KEY_CONFIG_TS, 0)
+        if (System.currentTimeMillis() - ts > CONFIG_CACHE_TTL_MS) return
+        val jsonStr = configPrefs.getString(KEY_CONFIG, null) ?: return
+        try {
+            val json = JSONObject(jsonStr)
+            val configMap = mutableMapOf<String, Any?>()
+            json.keys().forEach { key -> configMap[key] = json.opt(key) }
+            remoteConfig = configMap
+            Logger.debug("Loaded cached remote config")
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun saveCachedConfig(json: JSONObject) {
+        if (!::configPrefs.isInitialized) return
+        try {
+            configPrefs.edit()
+                .putString(KEY_CONFIG, json.toString())
+                .putLong(KEY_CONFIG_TS, System.currentTimeMillis())
+                .apply()
+        } catch (e: Exception) {
+            // ignore
+        }
+    }
+
+    private fun notifyConfigCallbacks(config: Map<String, Any?>) {
+        for (callback in configCallbacks) {
+            try {
+                callback.onConfigLoaded(config)
+            } catch (e: Exception) {
+                Logger.error("Config callback error: ${e.message}")
+            }
         }
     }
 
