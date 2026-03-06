@@ -55,12 +55,18 @@ internal class EventQueue(context: Context) {
     /**
      * Flush all events
      */
-    fun flush(client: NetworkClient, configuration: FunnelMobConfiguration) {
+    fun flush(client: NetworkClient, configuration: FunnelMobConfiguration, deviceId: String, userId: String? = null) {
         val batch = dequeue(configuration.maxBatchSize)
         if (batch.isEmpty()) return
 
-        // TODO: Implement actual network sending
         Logger.debug("Flushing ${batch.size} events")
+        client.sendEvents(batch, deviceId, configuration, userId) { result ->
+            result.onSuccess {
+                Logger.debug("Events sent successfully")
+            }.onFailure { error ->
+                Logger.error("Failed to send events: ${error.message}")
+            }
+        }
     }
 
     // MARK: - Persistence

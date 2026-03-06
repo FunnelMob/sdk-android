@@ -36,15 +36,20 @@ object FunnelMob {
     private var isEnabled = true
     private var attributionId: String? = null
     private val attributionCallbacks = mutableListOf<AttributionCallback>()
+    private var userId: String? = null
+    private var userProperties: MutableMap<String, Any>? = null
 
     private lateinit var appContext: Context
     private lateinit var eventQueue: EventQueue
     private lateinit var networkClient: NetworkClient
     private lateinit var deviceInfo: DeviceInfo
     private lateinit var attributionPrefs: SharedPreferences
+    private lateinit var userPrefs: SharedPreferences
 
     private const val ATTRIBUTION_PREFS = "funnelmob_attribution"
     private const val KEY_ATTRIBUTION_RESULT = "attribution_result"
+    private const val USER_PREFS = "funnelmob_user"
+    private const val KEY_USER_ID = "user_id"
     private const val REFERRER_TIMEOUT_SECS = 5L
 
     /**
@@ -66,11 +71,13 @@ object FunnelMob {
         this.networkClient = NetworkClient()
         this.deviceInfo = DeviceInfo(appContext)
         this.attributionPrefs = appContext.getSharedPreferences(ATTRIBUTION_PREFS, Context.MODE_PRIVATE)
+        this.userPrefs = appContext.getSharedPreferences(USER_PREFS, Context.MODE_PRIVATE)
 
         Logger.logLevel = configuration.logLevel
         Logger.info("FunnelMob initialized")
 
         isInitialized = true
+        restoreUserId()
         startSession()
     }
 
@@ -172,7 +179,7 @@ object FunnelMob {
     fun flush() {
         if (!isInitialized) return
         val config = configuration ?: return
-        eventQueue.flush(networkClient, config)
+        eventQueue.flush(networkClient, config, deviceInfo.deviceId, userId)
     }
 
     /**
@@ -186,7 +193,119 @@ object FunnelMob {
         Logger.info("Tracking ${if (enabled) "enabled" else "disabled"}")
     }
 
+    // MARK: - User Identification
+
+    /**
+     * Set the user ID for identified users.
+     * Sends an identify request to the server and attaches the user ID to all subsequent events.
+     *
+     * @param userId The user identifier (must be non-empty)
+     */
+    @JvmStatic
+    fun setUserId(userId: String) {
+        check(isInitialized) { "FunnelMob SDK not initialized. Call initialize() first." }
+
+        if (userId.isEmpty()) {
+            Logger.error("setUserId: userId cannot be empty")
+            return
+        }
+
+        this.userId = userId
+        persistUserId(userId)
+        Logger.info("User ID set: $userId")
+        sendIdentify()
+    }
+
+    /**
+     * Set user properties for the current identified user.
+     * Properties are merged with existing properties.
+     * Requires setUserId() to be called first.
+     *
+     * @param properties User properties to set
+     */
+    @JvmStatic
+    fun setUserProperties(properties: Map<String, Any>) {
+        check(isInitialized) { "FunnelMob SDK not initialized. Call initialize() first." }
+
+        if (userId == null) {
+            Logger.error("setUserProperties: call setUserId() first")
+            return
+        }
+
+        if (userProperties == null) {
+            userProperties = mutableMapOf()
+        }
+        userProperties!!.putAll(properties)
+
+        Logger.debug("User properties updated")
+        sendIdentify()
+    }
+
+    /**
+     * Clear the current user ID (e.g., on logout).
+     * Subsequent events will not include a user_id.
+     */
+    @JvmStatic
+    fun clearUserId() {
+        userId = null
+        userProperties = null
+        if (::userPrefs.isInitialized) {
+            userPrefs.edit().remove(KEY_USER_ID).apply()
+        }
+        Logger.info("User ID cleared")
+    }
+
     // MARK: - Private
+
+    private fun sendIdentify() {
+        val config = configuration ?: return
+        val uid = userId ?: return
+
+        Thread {
+            val context = deviceInfo.toContext()
+            val payload = JSONObject().apply {
+                put("device_id", deviceInfo.deviceId)
+                put("user_id", uid)
+                put("platform", "android")
+                put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }.format(java.util.Date()))
+                userProperties?.let { put("user_properties", JSONObject(it as Map<*, *>)) }
+                put("context", JSONObject().apply {
+                    put("os_version", context.osVersion)
+                    put("device_model", context.deviceModel)
+                    put("locale", context.locale)
+                    put("timezone", context.timezone)
+                    put("screen_width", context.screenWidth)
+                    put("screen_height", context.screenHeight)
+                })
+            }
+
+            networkClient.sendIdentify(payload, config) { result ->
+                result.onSuccess {
+                    Logger.debug("Identify request sent")
+                }.onFailure { error ->
+                    Logger.error("Identify request failed: ${error.message}")
+                }
+            }
+        }.start()
+    }
+
+    private fun persistUserId(userId: String) {
+        if (::userPrefs.isInitialized) {
+            userPrefs.edit().putString(KEY_USER_ID, userId).apply()
+        }
+    }
+
+    private fun restoreUserId() {
+        if (::userPrefs.isInitialized) {
+            val stored = userPrefs.getString(KEY_USER_ID, null)
+            if (stored != null) {
+                this.userId = stored
+                Logger.debug("Restored user ID: $stored")
+            }
+        }
+    }
 
     private fun startSession() {
         // Check for existing attribution

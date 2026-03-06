@@ -76,11 +76,12 @@ internal class NetworkClient {
         events: List<Event>,
         deviceId: String,
         configuration: FunnelMobConfiguration,
+        userId: String? = null,
         callback: (Result<Unit>) -> Unit
     ) {
         Thread {
             try {
-                val result = sendEventsSync(events, deviceId, configuration)
+                val result = sendEventsSync(events, deviceId, configuration, userId)
                 callback(result)
             } catch (e: Exception) {
                 callback(Result.failure(NetworkError.NetworkException(e)))
@@ -91,7 +92,8 @@ internal class NetworkClient {
     private fun sendEventsSync(
         events: List<Event>,
         deviceId: String,
-        configuration: FunnelMobConfiguration
+        configuration: FunnelMobConfiguration,
+        userId: String? = null
     ): Result<Unit> {
         val url = URL("${configuration.server.baseUrl}/events")
         val connection = url.openConnection() as HttpURLConnection
@@ -104,7 +106,7 @@ internal class NetworkClient {
             connection.readTimeout = 30_000
             connection.doOutput = true
 
-            val payload = createPayload(events, deviceId, configuration)
+            val payload = createPayload(events, deviceId, userId)
 
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(payload.toString())
@@ -126,10 +128,67 @@ internal class NetworkClient {
         }
     }
 
+    /**
+     * Send an identify request to link a user to a device
+     */
+    fun sendIdentify(
+        payload: JSONObject,
+        configuration: FunnelMobConfiguration,
+        callback: (Result<IdentifyResponse>) -> Unit
+    ) {
+        Thread {
+            try {
+                val result = sendIdentifySync(payload, configuration)
+                callback(result)
+            } catch (e: Exception) {
+                callback(Result.failure(NetworkError.NetworkException(e)))
+            }
+        }.start()
+    }
+
+    private fun sendIdentifySync(
+        payload: JSONObject,
+        configuration: FunnelMobConfiguration
+    ): Result<IdentifyResponse> {
+        val url = URL("${configuration.server.baseUrl}/identify")
+        val connection = url.openConnection() as HttpURLConnection
+
+        return try {
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-FM-API-Key", configuration.apiKey)
+            connection.connectTimeout = 30_000
+            connection.readTimeout = 30_000
+            connection.doOutput = true
+
+            OutputStreamWriter(connection.outputStream).use { writer ->
+                writer.write(payload.toString())
+                writer.flush()
+            }
+
+            val responseCode = connection.responseCode
+
+            when (responseCode) {
+                in 200..299 -> {
+                    val body = connection.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(body)
+                    Result.success(IdentifyResponse.fromJson(json))
+                }
+                401 -> Result.failure(NetworkError.Unauthorized)
+                429 -> Result.failure(NetworkError.RateLimited)
+                in 400..499 -> Result.failure(NetworkError.ClientError(responseCode))
+                in 500..599 -> Result.failure(NetworkError.ServerError(responseCode))
+                else -> Result.failure(NetworkError.UnknownError(responseCode))
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private fun createPayload(
         events: List<Event>,
         deviceId: String,
-        configuration: FunnelMobConfiguration
+        userId: String? = null
     ): JSONObject {
         val eventsArray = JSONArray()
         events.forEach { event ->
@@ -139,6 +198,7 @@ internal class NetworkClient {
         return JSONObject().apply {
             put("platform", "android")
             put("device_id", deviceId)
+            userId?.let { put("user_id", it) }
             put("events", eventsArray)
         }
     }

@@ -114,6 +114,21 @@ data class AttributionResult(
     }
 }
 
+/**
+ * Identify response from the server
+ */
+data class IdentifyResponse(
+    val status: String
+) {
+    companion object {
+        fun fromJson(json: JSONObject): IdentifyResponse {
+            return IdentifyResponse(
+                status = json.getString("status")
+            )
+        }
+    }
+}
+
 // Extension for public API
 internal fun com.funnelmob.sdk.FunnelMobRevenue.toEventRevenue(): EventRevenue {
     return EventRevenue(
