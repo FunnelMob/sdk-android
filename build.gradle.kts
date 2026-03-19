@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.library") version "8.2.0"
+    id("com.android.library") version "8.13.2"
     id("org.jetbrains.kotlin.android") version "1.9.21"
     id("maven-publish")
 }
