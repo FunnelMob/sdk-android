@@ -578,12 +578,204 @@ object FunnelMob {
 
         return name
     }
+
+    // MARK: - Typed Standard Event Methods
+
+    /** Meta only — fires on every page load */
+    @JvmStatic
+    fun trackPageView(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("PageView", parameters = parameters)
+    }
+
+    /** Meta + TikTok — visit to a product detail, landing, or content page */
+    @JvmStatic
+    fun trackViewContent(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("ViewContent", parameters = parameters)
+    }
+
+    /** Meta + TikTok — search performed on your site or app */
+    @JvmStatic
+    fun trackSearch(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Search", parameters = parameters)
+    }
+
+    /** Meta + TikTok — item added to shopping cart */
+    @JvmStatic
+    fun trackAddToCart(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("AddToCart", parameters = parameters)
+    }
+
+    /** Meta + TikTok — item added to wishlist */
+    @JvmStatic
+    fun trackAddToWishlist(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("AddToWishlist", parameters = parameters)
+    }
+
+    /** Meta + TikTok — start of checkout process */
+    @JvmStatic
+    fun trackInitiateCheckout(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("InitiateCheckout", parameters = parameters)
+    }
+
+    /** Meta + TikTok — payment info entered during checkout */
+    @JvmStatic
+    fun trackAddPaymentInfo(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("AddPaymentInfo", parameters = parameters)
+    }
+
+    /** Meta + TikTok — purchase completed; value and currency are required */
+    @JvmStatic
+    fun trackPurchase(value: Double, currency: String, parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Purchase", revenue = FunnelMobRevenue.of(value, currency), parameters = parameters)
+    }
+
+    /** Meta + TikTok — user submits contact information */
+    @JvmStatic
+    fun trackLead(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Lead", parameters = parameters)
+    }
+
+    /** Meta + TikTok — user completes a registration or sign-up flow */
+    @JvmStatic
+    fun trackCompleteRegistration(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("CompleteRegistration", parameters = parameters)
+    }
+
+    /** Meta + TikTok — any contact initiated between user and business */
+    @JvmStatic
+    fun trackContact(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Contact", parameters = parameters)
+    }
+
+    /** Meta + TikTok — user books an appointment or reservation */
+    @JvmStatic
+    fun trackSchedule(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Schedule", parameters = parameters)
+    }
+
+    /** Meta + TikTok — user searches for a physical business location */
+    @JvmStatic
+    fun trackFindLocation(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("FindLocation", parameters = parameters)
+    }
+
+    /** Meta + TikTok — user customizes a product */
+    @JvmStatic
+    fun trackCustomizeProduct(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("CustomizeProduct", parameters = parameters)
+    }
+
+    /** Meta only — donation completed; value and currency are required */
+    @JvmStatic
+    fun trackDonate(value: Double, currency: String, parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Donate", revenue = FunnelMobRevenue.of(value, currency), parameters = parameters)
+    }
+
+    /** Meta + TikTok — user submits an application */
+    @JvmStatic
+    fun trackSubmitApplication(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("SubmitApplication", parameters = parameters)
+    }
+
+    /** TikTok only — application previously submitted is approved */
+    @JvmStatic
+    fun trackApplicationApproval(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("ApplicationApproval", parameters = parameters)
+    }
+
+    /** TikTok only — user downloads a file or asset */
+    @JvmStatic
+    fun trackDownload(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Download", parameters = parameters)
+    }
+
+    /** TikTok legacy — use trackLead() for new implementations */
+    @JvmStatic
+    fun trackSubmitForm(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("SubmitForm", parameters = parameters)
+    }
+
+    /** Meta + TikTok — user begins a free trial; value and currency are required */
+    @JvmStatic
+    fun trackStartTrial(value: Double, currency: String, parameters: FunnelMobEventParameters? = null) {
+        trackEvent("StartTrial", revenue = FunnelMobRevenue.of(value, currency), parameters = parameters)
+    }
+
+    /** Meta + TikTok — user starts a paid subscription; value and currency are required */
+    @JvmStatic
+    fun trackSubscribe(value: Double, currency: String, parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Subscribe", revenue = FunnelMobRevenue.of(value, currency), parameters = parameters)
+    }
+
+    /** Meta only — user reaches a level in your app or game */
+    @JvmStatic
+    fun trackAchieveLevel(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("AchieveLevel", parameters = parameters)
+    }
+
+    /** Meta only — user completes a rewarded action or milestone */
+    @JvmStatic
+    fun trackUnlockAchievement(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("UnlockAchievement", parameters = parameters)
+    }
+
+    /**
+     * Meta only — user spends in-app credits or virtual currency; value is required.
+     * Note: value is passed as a parameter (not revenue) because SpentCredits uses
+     * virtual currency, which has no ISO 4217 currency code.
+     */
+    @JvmStatic
+    fun trackSpentCredits(value: Double, parameters: FunnelMobEventParameters? = null) {
+        val builder = FunnelMobEventParameters.Builder()
+        parameters?.toMap()?.forEach { (k, v) ->
+            when (v) {
+                is String -> builder.set(k, v)
+                is Int -> builder.set(k, v)
+                is Long -> builder.set(k, v)
+                is Double -> builder.set(k, v)
+                is Boolean -> builder.set(k, v)
+            }
+        }
+        builder.set("value", value)
+        trackEvent("SpentCredits", parameters = builder.build())
+    }
+
+    /** Meta only — user submits a rating */
+    @JvmStatic
+    fun trackRate(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Rate", parameters = parameters)
+    }
+
+    /** Meta only — user completes an in-app tutorial */
+    @JvmStatic
+    fun trackCompleteTutorial(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("CompleteTutorial", parameters = parameters)
+    }
+
+    /** Meta only — app launch or open */
+    @JvmStatic
+    fun trackActivateApp(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("ActivateApp", parameters = parameters)
+    }
+
+    /** Meta only — in-app ad clicked by user */
+    @JvmStatic
+    fun trackInAppAdClick(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("InAppAdClick", parameters = parameters)
+    }
+
+    /** Meta only — in-app ad appeared on-screen */
+    @JvmStatic
+    fun trackInAppAdImpression(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("InAppAdImpression", parameters = parameters)
+    }
 }
 
 /**
  * Standard event names for common actions
  */
 object FunnelMobStandardEvents {
+    // Legacy fm_-prefixed names (kept for backwards compatibility)
     const val REGISTRATION = "fm_registration"
     const val LOGIN = "fm_login"
     const val PURCHASE = "fm_purchase"
@@ -592,4 +784,37 @@ object FunnelMobStandardEvents {
     const val LEVEL_COMPLETE = "fm_level_complete"
     const val ADD_TO_CART = "fm_add_to_cart"
     const val CHECKOUT = "fm_checkout"
+
+    // Standard Meta/TikTok event names.
+    // ADD_TO_CART_STANDARD, PURCHASE_STANDARD, and SUBSCRIBE_STANDARD use the _STANDARD
+    // suffix because the legacy fm_-prefixed names already occupy the shorter names above.
+    const val PAGE_VIEW = "PageView"
+    const val VIEW_CONTENT = "ViewContent"
+    const val SEARCH = "Search"
+    const val ADD_TO_CART_STANDARD = "AddToCart"
+    const val ADD_TO_WISHLIST = "AddToWishlist"
+    const val INITIATE_CHECKOUT = "InitiateCheckout"
+    const val ADD_PAYMENT_INFO = "AddPaymentInfo"
+    const val PURCHASE_STANDARD = "Purchase"
+    const val LEAD = "Lead"
+    const val COMPLETE_REGISTRATION = "CompleteRegistration"
+    const val CONTACT = "Contact"
+    const val SCHEDULE = "Schedule"
+    const val FIND_LOCATION = "FindLocation"
+    const val CUSTOMIZE_PRODUCT = "CustomizeProduct"
+    const val DONATE = "Donate"
+    const val SUBMIT_APPLICATION = "SubmitApplication"
+    const val APPLICATION_APPROVAL = "ApplicationApproval"
+    const val DOWNLOAD = "Download"
+    const val SUBMIT_FORM = "SubmitForm"
+    const val START_TRIAL = "StartTrial"
+    const val SUBSCRIBE_STANDARD = "Subscribe"
+    const val ACHIEVE_LEVEL = "AchieveLevel"
+    const val UNLOCK_ACHIEVEMENT = "UnlockAchievement"
+    const val SPENT_CREDITS = "SpentCredits"
+    const val RATE = "Rate"
+    const val COMPLETE_TUTORIAL = "CompleteTutorial"
+    const val ACTIVATE_APP = "ActivateApp"
+    const val IN_APP_AD_CLICK = "InAppAdClick"
+    const val IN_APP_AD_IMPRESSION = "InAppAdImpression"
 }
