@@ -156,7 +156,31 @@ FunnelMob.trackEvent("subscribe", revenue, params)
 
 ## Standard Events
 
-Use predefined event names for consistent analytics:
+### Using Typed Methods (Recommended)
+
+29 typed methods provide self-documenting event tracking without needing to remember event name strings:
+
+```kotlin
+// Simple events
+FunnelMob.trackPageView()
+FunnelMob.trackAddToCart(FunnelMobEventParameters.build { set("item_id", "SKU-123") })
+
+// Revenue events (value + currency required)
+FunnelMob.trackPurchase(29.99, "USD")
+FunnelMob.trackPurchase(29.99, "USD", FunnelMobEventParameters.build { set("order_id", "ORD-456") })
+FunnelMob.trackSubscribe(9.99, "USD")
+FunnelMob.trackStartTrial(0.0, "USD")
+FunnelMob.trackDonate(10.0, "USD")
+
+// Spend credits (value only)
+FunnelMob.trackSpentCredits(100.0)
+```
+
+See [docs/specs/sdk_events_reference.md](../docs/specs/sdk_events_reference.md) for the full list of 29 typed methods with platform support details.
+
+### Using Constants
+
+For custom event handling or when using the generic `trackEvent` API:
 
 ```kotlin
 import com.funnelmob.sdk.FunnelMobStandardEvents
@@ -170,17 +194,6 @@ FunnelMob.trackEvent(FunnelMobStandardEvents.LEVEL_COMPLETE)
 FunnelMob.trackEvent(FunnelMobStandardEvents.ADD_TO_CART)
 FunnelMob.trackEvent(FunnelMobStandardEvents.CHECKOUT)
 ```
-
-| Event | Constant | Value |
-|-------|----------|-------|
-| Registration | `FunnelMobStandardEvents.REGISTRATION` | `fm_registration` |
-| Login | `FunnelMobStandardEvents.LOGIN` | `fm_login` |
-| Purchase | `FunnelMobStandardEvents.PURCHASE` | `fm_purchase` |
-| Subscribe | `FunnelMobStandardEvents.SUBSCRIBE` | `fm_subscribe` |
-| Tutorial Complete | `FunnelMobStandardEvents.TUTORIAL_COMPLETE` | `fm_tutorial_complete` |
-| Level Complete | `FunnelMobStandardEvents.LEVEL_COMPLETE` | `fm_level_complete` |
-| Add to Cart | `FunnelMobStandardEvents.ADD_TO_CART` | `fm_add_to_cart` |
-| Checkout | `FunnelMobStandardEvents.CHECKOUT` | `fm_checkout` |
 
 ## SDK Control
 
