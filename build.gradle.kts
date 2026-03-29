@@ -1,3 +1,6 @@
+group = "com.funnelmob"
+version = "0.1.0"
+
 plugins {
     id("com.android.library") version "8.13.2"
     id("org.jetbrains.kotlin.android") version "1.9.21"

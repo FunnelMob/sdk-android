@@ -34,7 +34,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<JSONObject?> {
-        val url = URL("${configuration.server.baseUrl}/session")
+        val url = URL("${configuration.baseUrl}/session")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -95,7 +95,7 @@ internal class NetworkClient {
         configuration: FunnelMobConfiguration,
         userId: String? = null
     ): Result<Unit> {
-        val url = URL("${configuration.server.baseUrl}/events")
+        val url = URL("${configuration.baseUrl}/events")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -150,7 +150,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<IdentifyResponse> {
-        val url = URL("${configuration.server.baseUrl}/identify")
+        val url = URL("${configuration.baseUrl}/identify")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -205,7 +205,7 @@ internal class NetworkClient {
     private fun fetchConfigSync(
         configuration: FunnelMobConfiguration
     ): Result<JSONObject> {
-        val url = URL("${configuration.server.baseUrl}/config")
+        val url = URL("${configuration.baseUrl}/config")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {

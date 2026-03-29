@@ -15,6 +15,8 @@ import org.json.JSONObject
 import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
@@ -55,6 +57,7 @@ object FunnelMob {
     private lateinit var attributionPrefs: SharedPreferences
     private lateinit var userPrefs: SharedPreferences
     private lateinit var configPrefs: SharedPreferences
+    private var flushScheduler: ScheduledExecutorService? = null
 
     private const val ATTRIBUTION_PREFS = "funnelmob_attribution"
     private const val KEY_ATTRIBUTION_RESULT = "attribution_result"
@@ -96,6 +99,7 @@ object FunnelMob {
         startSession()
         loadCachedConfig()
         fetchRemoteConfig()
+        startFlushTimer(configuration)
     }
 
     /**
@@ -511,6 +515,16 @@ object FunnelMob {
     }
 
     // MARK: - Remote Config (Private)
+
+    private fun startFlushTimer(configuration: FunnelMobConfiguration) {
+        flushScheduler = Executors.newSingleThreadScheduledExecutor()
+        flushScheduler?.scheduleAtFixedRate(
+            { flush() },
+            configuration.flushIntervalMs,
+            configuration.flushIntervalMs,
+            TimeUnit.MILLISECONDS
+        )
+    }
 
     private fun fetchRemoteConfig() {
         val config = configuration ?: return
