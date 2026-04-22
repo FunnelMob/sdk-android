@@ -8,6 +8,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
+ * Base URL for the FunnelMob API. Hardcoded — there is only one production
+ * endpoint and one API key model.
+ */
+private const val BASE_URL = "https://api.funnelmob.com/v1"
+
+/**
  * HTTP client for sending events to the FunnelMob API
  */
 internal class NetworkClient {
@@ -34,7 +40,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<JSONObject?> {
-        val url = URL("${configuration.baseUrl}/session")
+        val url = URL("$BASE_URL/session")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -95,7 +101,7 @@ internal class NetworkClient {
         configuration: FunnelMobConfiguration,
         userId: String? = null
     ): Result<Unit> {
-        val url = URL("${configuration.baseUrl}/events")
+        val url = URL("$BASE_URL/events")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -150,7 +156,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<IdentifyResponse> {
-        val url = URL("${configuration.baseUrl}/identify")
+        val url = URL("$BASE_URL/identify")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -205,7 +211,7 @@ internal class NetworkClient {
     private fun fetchConfigSync(
         configuration: FunnelMobConfiguration
     ): Result<JSONObject> {
-        val url = URL("${configuration.baseUrl}/config")
+        val url = URL("$BASE_URL/config")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {

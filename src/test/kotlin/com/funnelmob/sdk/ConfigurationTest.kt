@@ -12,7 +12,6 @@ class ConfigurationTest {
         )
 
         assertEquals("fm_test_key", config.apiKey)
-        assertEquals(FunnelMobConfiguration.Server.PRODUCTION, config.server)
         assertEquals(FunnelMobConfiguration.LogLevel.NONE, config.logLevel)
         assertEquals(30_000L, config.flushIntervalMs)
         assertEquals(100, config.maxBatchSize)
@@ -23,13 +22,11 @@ class ConfigurationTest {
         val config = FunnelMobConfiguration.Builder(
             apiKey = "fm_test_key"
         )
-            .server(FunnelMobConfiguration.Server.SANDBOX)
             .logLevel(FunnelMobConfiguration.LogLevel.DEBUG)
             .flushInterval(10_000L)
             .maxBatchSize(50)
             .build()
 
-        assertEquals(FunnelMobConfiguration.Server.SANDBOX, config.server)
         assertEquals(FunnelMobConfiguration.LogLevel.DEBUG, config.logLevel)
         assertEquals(10_000L, config.flushIntervalMs)
         assertEquals(50, config.maxBatchSize)
@@ -62,17 +59,5 @@ class ConfigurationTest {
 
         assertEquals(1, configLow.maxBatchSize)
         assertEquals(100, configHigh.maxBatchSize)
-    }
-
-    @Test
-    fun `production server has correct URL`() {
-        val server = FunnelMobConfiguration.Server.PRODUCTION
-        assertEquals("https://api.funnelmob.com/v1", server.baseUrl)
-    }
-
-    @Test
-    fun `sandbox server has correct URL`() {
-        val server = FunnelMobConfiguration.Server.SANDBOX
-        assertEquals("https://sandbox.funnelmob.com/v1", server.baseUrl)
     }
 }

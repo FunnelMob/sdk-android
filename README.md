@@ -54,14 +54,12 @@ FunnelMob.flush()
 
 ```kotlin
 import com.funnelmob.sdk.FunnelMobConfiguration
-import com.funnelmob.sdk.FunnelMobConfiguration.Environment
 import com.funnelmob.sdk.FunnelMobConfiguration.LogLevel
 
 val config = FunnelMobConfiguration.Builder(
     appId = "com.example.myapp",       // Required: Your app identifier
     apiKey = "fm_live_abc123"          // Required: Your API key
 )
-    .environment(Environment.PRODUCTION)  // Optional: PRODUCTION (default) or SANDBOX
     .logLevel(LogLevel.NONE)              // Optional: NONE, ERROR, WARNING, INFO, DEBUG, VERBOSE
     .flushInterval(30_000L)               // Optional: Auto-flush interval in ms (min: 1000, default: 30000)
     .maxBatchSize(100)                    // Optional: Events per batch (1-100, default: 100)
@@ -74,19 +72,11 @@ val config = FunnelMobConfiguration.Builder(
 val config = FunnelMobConfiguration(
     appId = "com.example.myapp",
     apiKey = "fm_live_abc123",
-    environment = Environment.PRODUCTION,
     logLevel = LogLevel.NONE,
     flushIntervalMs = 30_000L,
     maxBatchSize = 100
 )
 ```
-
-### Environment Options
-
-| Environment | Base URL |
-|-------------|----------|
-| `Environment.PRODUCTION` | `https://api.funnelmob.com/v1` |
-| `Environment.SANDBOX` | `https://sandbox.funnelmob.com/v1` |
 
 ## Event Tracking
 
