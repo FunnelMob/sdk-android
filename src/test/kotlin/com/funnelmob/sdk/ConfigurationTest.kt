@@ -15,6 +15,41 @@ class ConfigurationTest {
         assertEquals(FunnelMobConfiguration.LogLevel.NONE, config.logLevel)
         assertEquals(30_000L, config.flushIntervalMs)
         assertEquals(100, config.maxBatchSize)
+        assertNull(config.customUrl)
+    }
+
+    @Test
+    fun `customUrl is null by default`() {
+        val config = FunnelMobConfiguration.Builder("fm_test_key").build()
+        assertNull(config.customUrl)
+    }
+
+    @Test
+    fun `customUrl override is honored`() {
+        val config = FunnelMobConfiguration.Builder("fm_test_key")
+            .customUrl("http://10.0.2.2:3080")
+            .build()
+
+        assertEquals("http://10.0.2.2:3080", config.customUrl)
+    }
+
+    @Test
+    fun `customUrl trailing slash is trimmed`() {
+        val config = FunnelMobConfiguration.Builder("fm_test_key")
+            .customUrl("http://localhost:3080/")
+            .build()
+
+        assertEquals("http://localhost:3080", config.customUrl)
+    }
+
+    @Test
+    fun `customUrl null clears any previous value`() {
+        val config = FunnelMobConfiguration.Builder("fm_test_key")
+            .customUrl("http://localhost:3080")
+            .customUrl(null)
+            .build()
+
+        assertNull(config.customUrl)
     }
 
     @Test

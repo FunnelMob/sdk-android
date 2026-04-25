@@ -14,7 +14,16 @@ data class FunnelMobConfiguration(
     val flushIntervalMs: Long = 30_000L,
 
     /** Maximum number of events per batch */
-    val maxBatchSize: Int = 100
+    val maxBatchSize: Int = 100,
+
+    /**
+     * Optional override for the API base URL. When `null`, the SDK uses
+     * the production endpoint (`https://api.funnelmob.com`). The SDK
+     * appends `/v1/<endpoint>` itself, so pass the host root only
+     * (e.g. `http://10.0.2.2:3080` for the Android emulator).
+     * Trailing slashes are stripped.
+     */
+    val customUrl: String? = null
 ) {
 
     /**
@@ -38,6 +47,7 @@ data class FunnelMobConfiguration(
         private var logLevel = LogLevel.NONE
         private var flushIntervalMs = 30_000L
         private var maxBatchSize = 100
+        private var customUrl: String? = null
 
         fun logLevel(level: LogLevel) = apply { logLevel = level }
 
@@ -49,11 +59,21 @@ data class FunnelMobConfiguration(
             maxBatchSize = size.coerceIn(1, 100)
         }
 
+        /**
+         * Override the API base URL. Pass the host root without `/v1`
+         * (e.g. `http://10.0.2.2:3080` from the Android emulator pointing
+         * at a backend on the host machine).
+         */
+        fun customUrl(url: String?) = apply {
+            customUrl = url?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+        }
+
         fun build() = FunnelMobConfiguration(
             apiKey = apiKey,
             logLevel = logLevel,
             flushIntervalMs = flushIntervalMs,
-            maxBatchSize = maxBatchSize
+            maxBatchSize = maxBatchSize,
+            customUrl = customUrl
         )
     }
 }

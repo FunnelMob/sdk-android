@@ -8,10 +8,20 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Base URL for the FunnelMob API. Hardcoded — there is only one production
- * endpoint and one API key model.
+ * Default base URL for the FunnelMob API. Used when
+ * [FunnelMobConfiguration.customUrl] is null.
  */
-private const val BASE_URL = "https://api.funnelmob.com/v1"
+internal const val DEFAULT_BASE_URL = "https://api.funnelmob.com"
+
+/**
+ * Resolves the base URL for the SDK to call, including the `/v1` API
+ * version segment. Trims trailing slashes from a custom override.
+ */
+internal fun baseUrl(configuration: FunnelMobConfiguration): String {
+    val root = configuration.customUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+        ?: DEFAULT_BASE_URL
+    return "$root/v1"
+}
 
 /**
  * HTTP client for sending events to the FunnelMob API
@@ -40,7 +50,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<JSONObject?> {
-        val url = URL("$BASE_URL/session")
+        val url = URL("${baseUrl(configuration)}/session")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -101,7 +111,7 @@ internal class NetworkClient {
         configuration: FunnelMobConfiguration,
         userId: String? = null
     ): Result<Unit> {
-        val url = URL("$BASE_URL/events")
+        val url = URL("${baseUrl(configuration)}/events")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -113,6 +123,7 @@ internal class NetworkClient {
             connection.doOutput = true
 
             val payload = createPayload(events, deviceId, userId)
+            Logger.debug("POST $url payload=${payload}")
 
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(payload.toString())
@@ -120,6 +131,11 @@ internal class NetworkClient {
             }
 
             val responseCode = connection.responseCode
+            val responseBody = try {
+                (connection.errorStream ?: connection.inputStream)
+                    ?.bufferedReader()?.use { it.readText() }
+            } catch (e: Exception) { null }
+            Logger.debug("POST $url -> $responseCode body=$responseBody")
 
             when (responseCode) {
                 in 200..299 -> Result.success(Unit)
@@ -156,7 +172,7 @@ internal class NetworkClient {
         payload: JSONObject,
         configuration: FunnelMobConfiguration
     ): Result<IdentifyResponse> {
-        val url = URL("$BASE_URL/identify")
+        val url = URL("${baseUrl(configuration)}/identify")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {
@@ -211,7 +227,7 @@ internal class NetworkClient {
     private fun fetchConfigSync(
         configuration: FunnelMobConfiguration
     ): Result<JSONObject> {
-        val url = URL("$BASE_URL/config")
+        val url = URL("${baseUrl(configuration)}/config")
         val connection = url.openConnection() as HttpURLConnection
 
         return try {

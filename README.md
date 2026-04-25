@@ -32,7 +32,6 @@ class MyApplication : Application() {
 
         // Configure the SDK
         val config = FunnelMobConfiguration.Builder(
-            appId = "com.example.myapp",
             apiKey = "fm_live_abc123"
         ).build()
 
@@ -57,12 +56,12 @@ import com.funnelmob.sdk.FunnelMobConfiguration
 import com.funnelmob.sdk.FunnelMobConfiguration.LogLevel
 
 val config = FunnelMobConfiguration.Builder(
-    appId = "com.example.myapp",       // Required: Your app identifier
-    apiKey = "fm_live_abc123"          // Required: Your API key
+    apiKey = "fm_live_abc123"             // Required: Your API key
 )
     .logLevel(LogLevel.NONE)              // Optional: NONE, ERROR, WARNING, INFO, DEBUG, VERBOSE
     .flushInterval(30_000L)               // Optional: Auto-flush interval in ms (min: 1000, default: 30000)
     .maxBatchSize(100)                    // Optional: Events per batch (1-100, default: 100)
+    .customUrl("http://10.0.2.2:3080")    // Optional: Override the API host (default: https://api.funnelmob.com)
     .build()
 ```
 
@@ -70,13 +69,30 @@ val config = FunnelMobConfiguration.Builder(
 
 ```kotlin
 val config = FunnelMobConfiguration(
-    appId = "com.example.myapp",
     apiKey = "fm_live_abc123",
     logLevel = LogLevel.NONE,
     flushIntervalMs = 30_000L,
-    maxBatchSize = 100
+    maxBatchSize = 100,
+    customUrl = "http://10.0.2.2:3080"  // Optional override; null = production
 )
 ```
+
+### Custom Base URL
+
+By default the SDK calls `https://api.funnelmob.com`, appending `/v1/<endpoint>`
+to each request. Pass `customUrl` to point at a different host (typically for
+local development against a backend running on your dev machine):
+
+```kotlin
+val config = FunnelMobConfiguration.Builder("fm_test_key")
+    // From the Android emulator, 10.0.2.2 is the host machine.
+    .customUrl("http://10.0.2.2:3080")
+    .build()
+```
+
+Pass the **host root only** — the SDK appends `/v1` itself, so
+`http://10.0.2.2:3080` (not `http://10.0.2.2:3080/v1`). A trailing slash is
+trimmed automatically.
 
 ## Event Tracking
 
@@ -210,7 +226,6 @@ import com.funnelmob.sdk.FunnelMobEventParameters;
 
 // Initialize
 FunnelMobConfiguration config = new FunnelMobConfiguration.Builder(
-    "com.example.myapp",
     "fm_live_abc123"
 ).build();
 
@@ -284,7 +299,7 @@ try {
 Validation errors are logged. Set `logLevel` to see them:
 
 ```kotlin
-val config = FunnelMobConfiguration.Builder(appId, apiKey)
+val config = FunnelMobConfiguration.Builder(apiKey)
     .logLevel(LogLevel.DEBUG)  // See validation errors in logcat
     .build()
 ```
