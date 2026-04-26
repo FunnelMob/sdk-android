@@ -9,27 +9,17 @@ class StandardEventsTest {
     // MARK: - FunnelMobStandardEvents constants
 
     @Test
-    fun `legacy fm_-prefixed constants are preserved`() {
-        assertEquals("fm_registration", FunnelMobStandardEvents.REGISTRATION)
-        assertEquals("fm_login", FunnelMobStandardEvents.LOGIN)
-        assertEquals("fm_purchase", FunnelMobStandardEvents.PURCHASE)
-        assertEquals("fm_subscribe", FunnelMobStandardEvents.SUBSCRIBE)
-        assertEquals("fm_tutorial_complete", FunnelMobStandardEvents.TUTORIAL_COMPLETE)
-        assertEquals("fm_level_complete", FunnelMobStandardEvents.LEVEL_COMPLETE)
-        assertEquals("fm_add_to_cart", FunnelMobStandardEvents.ADD_TO_CART)
-        assertEquals("fm_checkout", FunnelMobStandardEvents.CHECKOUT)
-    }
-
-    @Test
     fun `standard Meta+TikTok event name constants are correct`() {
+        assertEquals("Install", FunnelMobStandardEvents.INSTALL)
+        assertEquals("ActivateApp", FunnelMobStandardEvents.ACTIVATE_APP)
         assertEquals("PageView", FunnelMobStandardEvents.PAGE_VIEW)
         assertEquals("ViewContent", FunnelMobStandardEvents.VIEW_CONTENT)
         assertEquals("Search", FunnelMobStandardEvents.SEARCH)
-        assertEquals("AddToCart", FunnelMobStandardEvents.ADD_TO_CART_STANDARD)
+        assertEquals("AddToCart", FunnelMobStandardEvents.ADD_TO_CART)
         assertEquals("AddToWishlist", FunnelMobStandardEvents.ADD_TO_WISHLIST)
         assertEquals("InitiateCheckout", FunnelMobStandardEvents.INITIATE_CHECKOUT)
         assertEquals("AddPaymentInfo", FunnelMobStandardEvents.ADD_PAYMENT_INFO)
-        assertEquals("Purchase", FunnelMobStandardEvents.PURCHASE_STANDARD)
+        assertEquals("Purchase", FunnelMobStandardEvents.PURCHASE)
         assertEquals("Lead", FunnelMobStandardEvents.LEAD)
         assertEquals("CompleteRegistration", FunnelMobStandardEvents.COMPLETE_REGISTRATION)
         assertEquals("Contact", FunnelMobStandardEvents.CONTACT)
@@ -42,13 +32,12 @@ class StandardEventsTest {
         assertEquals("Download", FunnelMobStandardEvents.DOWNLOAD)
         assertEquals("SubmitForm", FunnelMobStandardEvents.SUBMIT_FORM)
         assertEquals("StartTrial", FunnelMobStandardEvents.START_TRIAL)
-        assertEquals("Subscribe", FunnelMobStandardEvents.SUBSCRIBE_STANDARD)
+        assertEquals("Subscribe", FunnelMobStandardEvents.SUBSCRIBE)
         assertEquals("AchieveLevel", FunnelMobStandardEvents.ACHIEVE_LEVEL)
         assertEquals("UnlockAchievement", FunnelMobStandardEvents.UNLOCK_ACHIEVEMENT)
         assertEquals("SpentCredits", FunnelMobStandardEvents.SPENT_CREDITS)
         assertEquals("Rate", FunnelMobStandardEvents.RATE)
         assertEquals("CompleteTutorial", FunnelMobStandardEvents.COMPLETE_TUTORIAL)
-        assertEquals("ActivateApp", FunnelMobStandardEvents.ACTIVATE_APP)
         assertEquals("InAppAdClick", FunnelMobStandardEvents.IN_APP_AD_CLICK)
         assertEquals("InAppAdImpression", FunnelMobStandardEvents.IN_APP_AD_IMPRESSION)
     }
@@ -161,13 +150,14 @@ class StandardEventsTest {
     @Test
     fun `all standard event names pass SDK validation`() {
         val allNames = listOf(
+            "Install", "ActivateApp",
             "PageView", "ViewContent", "Search", "AddToCart", "AddToWishlist",
             "InitiateCheckout", "AddPaymentInfo", "Purchase", "Lead",
             "CompleteRegistration", "Contact", "Schedule", "FindLocation",
             "CustomizeProduct", "Donate", "SubmitApplication", "ApplicationApproval",
             "Download", "SubmitForm", "StartTrial", "Subscribe", "AchieveLevel",
             "UnlockAchievement", "SpentCredits", "Rate", "CompleteTutorial",
-            "ActivateApp", "InAppAdClick", "InAppAdImpression"
+            "InAppAdClick", "InAppAdImpression"
         )
 
         val pattern = Regex("^[a-zA-Z][a-zA-Z0-9_]*$")

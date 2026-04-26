@@ -100,12 +100,23 @@ object FunnelMob {
         Logger.info("FunnelMob initialized")
 
         isInitialized = true
+        val isFirstLaunch = loadAttribution() == null
+
         restoreUserId()
         startSession()
         loadCachedConfig()
         fetchRemoteConfig()
         startFlushTimer(configuration)
         registerLifecycleObserver()
+
+        if (isFirstLaunch) {
+            trackInstall()
+            trackActivateApp(
+                FunnelMobEventParameters.build { set("is_first_session", true) }
+            )
+        } else {
+            trackActivateApp()
+        }
     }
 
     /**
@@ -792,7 +803,17 @@ object FunnelMob {
         trackEvent("CompleteTutorial", parameters = parameters)
     }
 
-    /** Meta only — app launch or open */
+    /**
+     * First-launch install event. Maps to Meta's `Install` event in CAPI and
+     * TikTok's `InstallApp` in Events API. Fired automatically by
+     * [initialize] on the device's first ever launch.
+     */
+    @JvmStatic
+    fun trackInstall(parameters: FunnelMobEventParameters? = null) {
+        trackEvent("Install", parameters = parameters)
+    }
+
+    /** App launch / activate. Fired automatically by [initialize] on every cold start. */
     @JvmStatic
     fun trackActivateApp(parameters: FunnelMobEventParameters? = null) {
         trackEvent("ActivateApp", parameters = parameters)
@@ -812,30 +833,23 @@ object FunnelMob {
 }
 
 /**
- * Standard event names for common actions
+ * Standard event names for common actions.
+ *
+ * Names mirror Meta/TikTok Standard Events verbatim so the postback layer
+ * does not need to translate. INSTALL and ACTIVATE_APP are mobile lifecycle
+ * events fired automatically by FunnelMob.initialize().
  */
 object FunnelMobStandardEvents {
-    // Legacy fm_-prefixed names (kept for backwards compatibility)
-    const val REGISTRATION = "fm_registration"
-    const val LOGIN = "fm_login"
-    const val PURCHASE = "fm_purchase"
-    const val SUBSCRIBE = "fm_subscribe"
-    const val TUTORIAL_COMPLETE = "fm_tutorial_complete"
-    const val LEVEL_COMPLETE = "fm_level_complete"
-    const val ADD_TO_CART = "fm_add_to_cart"
-    const val CHECKOUT = "fm_checkout"
-
-    // Standard Meta/TikTok event names.
-    // ADD_TO_CART_STANDARD, PURCHASE_STANDARD, and SUBSCRIBE_STANDARD use the _STANDARD
-    // suffix because the legacy fm_-prefixed names already occupy the shorter names above.
+    const val INSTALL = "Install"
+    const val ACTIVATE_APP = "ActivateApp"
     const val PAGE_VIEW = "PageView"
     const val VIEW_CONTENT = "ViewContent"
     const val SEARCH = "Search"
-    const val ADD_TO_CART_STANDARD = "AddToCart"
+    const val ADD_TO_CART = "AddToCart"
     const val ADD_TO_WISHLIST = "AddToWishlist"
     const val INITIATE_CHECKOUT = "InitiateCheckout"
     const val ADD_PAYMENT_INFO = "AddPaymentInfo"
-    const val PURCHASE_STANDARD = "Purchase"
+    const val PURCHASE = "Purchase"
     const val LEAD = "Lead"
     const val COMPLETE_REGISTRATION = "CompleteRegistration"
     const val CONTACT = "Contact"
@@ -848,13 +862,12 @@ object FunnelMobStandardEvents {
     const val DOWNLOAD = "Download"
     const val SUBMIT_FORM = "SubmitForm"
     const val START_TRIAL = "StartTrial"
-    const val SUBSCRIBE_STANDARD = "Subscribe"
+    const val SUBSCRIBE = "Subscribe"
     const val ACHIEVE_LEVEL = "AchieveLevel"
     const val UNLOCK_ACHIEVEMENT = "UnlockAchievement"
     const val SPENT_CREDITS = "SpentCredits"
     const val RATE = "Rate"
     const val COMPLETE_TUTORIAL = "CompleteTutorial"
-    const val ACTIVATE_APP = "ActivateApp"
     const val IN_APP_AD_CLICK = "InAppAdClick"
     const val IN_APP_AD_IMPRESSION = "InAppAdImpression"
 }
