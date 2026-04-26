@@ -2,6 +2,11 @@ package com.funnelmob.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
 import com.funnelmob.sdk.internal.AttributionResult
@@ -100,6 +105,7 @@ object FunnelMob {
         loadCachedConfig()
         fetchRemoteConfig()
         startFlushTimer(configuration)
+        registerLifecycleObserver()
     }
 
     /**
@@ -238,8 +244,14 @@ object FunnelMob {
             attributionId = attributionId
         )
 
-        eventQueue.enqueue(event)
+        val queueSize = eventQueue.enqueue(event)
         Logger.debug("Event queued: $name")
+
+        configuration?.let { cfg ->
+            if (queueSize >= cfg.maxBatchSize) {
+                flush()
+            }
+        }
     }
 
     /**
@@ -524,6 +536,20 @@ object FunnelMob {
             configuration.flushIntervalMs,
             TimeUnit.MILLISECONDS
         )
+    }
+
+    private fun registerLifecycleObserver() {
+        Handler(Looper.getMainLooper()).post {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onStart(owner: LifecycleOwner) {
+                    flush()
+                }
+
+                override fun onStop(owner: LifecycleOwner) {
+                    flush()
+                }
+            })
+        }
     }
 
     private fun fetchRemoteConfig() {

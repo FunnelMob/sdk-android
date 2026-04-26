@@ -24,12 +24,13 @@ internal class EventQueue(context: Context) {
     }
 
     /**
-     * Add event to queue
+     * Add event to queue. Returns the new queue size.
      */
-    fun enqueue(event: Event) {
-        lock.withLock {
+    fun enqueue(event: Event): Int {
+        return lock.withLock {
             events.add(event)
             persistEvents()
+            events.size
         }
     }
 
