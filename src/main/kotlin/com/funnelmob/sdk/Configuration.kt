@@ -21,7 +21,10 @@ data class FunnelMobConfiguration(
      * the production endpoint (`https://api.funnelmob.com`). The SDK
      * appends `/v1/<endpoint>` itself, so pass the host root only
      * (e.g. `http://10.0.2.2:3080` for the Android emulator).
-     * Trailing slashes are stripped.
+     *
+     * The Builder trims trailing slashes from this value at construction
+     * time; `NetworkClient.baseUrl` also trims at use-time so direct
+     * data-class construction with a trailing slash still works.
      */
     val customUrl: String? = null
 ) {

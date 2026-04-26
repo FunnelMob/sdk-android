@@ -1,7 +1,7 @@
 package com.funnelmob.sdk
 
-import com.funnelmob.sdk.internal.DEFAULT_BASE_URL
-import com.funnelmob.sdk.internal.baseUrl
+import com.funnelmob.sdk.internal.NetworkClient.Companion.DEFAULT_BASE_URL
+import com.funnelmob.sdk.internal.NetworkClient.Companion.baseUrl
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

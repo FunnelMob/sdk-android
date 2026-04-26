@@ -8,25 +8,28 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Default base URL for the FunnelMob API. Used when
- * [FunnelMobConfiguration.customUrl] is null.
- */
-internal const val DEFAULT_BASE_URL = "https://api.funnelmob.com"
-
-/**
- * Resolves the base URL for the SDK to call, including the `/v1` API
- * version segment. Trims trailing slashes from a custom override.
- */
-internal fun baseUrl(configuration: FunnelMobConfiguration): String {
-    val root = configuration.customUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() }
-        ?: DEFAULT_BASE_URL
-    return "$root/v1"
-}
-
-/**
  * HTTP client for sending events to the FunnelMob API
  */
 internal class NetworkClient {
+
+    companion object {
+        /**
+         * Default base URL for the FunnelMob API. Used when
+         * [FunnelMobConfiguration.customUrl] is null.
+         */
+        internal const val DEFAULT_BASE_URL = "https://api.funnelmob.com"
+
+        /**
+         * Resolves the base URL for the SDK to call, including the `/v1`
+         * API version segment. Trims trailing slashes from a custom override
+         * (defense-in-depth — the Builder also trims at construction time).
+         */
+        internal fun baseUrl(configuration: FunnelMobConfiguration): String {
+            val root = configuration.customUrl?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+                ?: DEFAULT_BASE_URL
+            return "$root/v1"
+        }
+    }
 
     /**
      * Send a session request and receive attribution result
@@ -123,7 +126,6 @@ internal class NetworkClient {
             connection.doOutput = true
 
             val payload = createPayload(events, deviceId, userId)
-            Logger.debug("POST $url payload=${payload}")
 
             OutputStreamWriter(connection.outputStream).use { writer ->
                 writer.write(payload.toString())
@@ -131,11 +133,6 @@ internal class NetworkClient {
             }
 
             val responseCode = connection.responseCode
-            val responseBody = try {
-                (connection.errorStream ?: connection.inputStream)
-                    ?.bufferedReader()?.use { it.readText() }
-            } catch (e: Exception) { null }
-            Logger.debug("POST $url -> $responseCode body=$responseBody")
 
             when (responseCode) {
                 in 200..299 -> Result.success(Unit)
