@@ -46,6 +46,9 @@ object FunnelMob {
     @Volatile
     private var isInitialized = false
 
+    @Volatile
+    private var isStarted = false
+
     private var configuration: FunnelMobConfiguration? = null
     private var isEnabled = true
     private var attributionId: String? = null
@@ -64,6 +67,21 @@ object FunnelMob {
     private lateinit var configPrefs: SharedPreferences
     private var flushScheduler: ScheduledExecutorService? = null
 
+    // ─── User identifiers ────────────────────────────────────────────────
+    // Stored in memory only — never persisted. Hosts re-supply on each
+    // launch (typically from their auth/consent state). GAID explicitly
+    // should not be persisted because consent can be revoked between
+    // sessions.
+    @Volatile private var gaid: String? = null
+    @Volatile private var hashedEmail: String? = null
+    @Volatile private var hashedPhone: String? = null
+    @Volatile private var hashedExternalId: String? = null
+    @Volatile private var isIdentifierDirty = false
+    @Volatile private var isReFireInFlight = false
+    private var identifierHandler: Handler? = null
+    private var identifierDebounceRunnable: Runnable? = null
+    private const val IDENTIFIER_DEBOUNCE_MS = 1000L
+
     private const val ATTRIBUTION_PREFS = "funnelmob_attribution"
     private const val KEY_ATTRIBUTION_RESULT = "attribution_result"
     private const val USER_PREFS = "funnelmob_user"
@@ -75,7 +93,16 @@ object FunnelMob {
     private const val REFERRER_TIMEOUT_SECS = 5L
 
     /**
-     * Initialize the SDK with context and configuration
+     * Initialize the SDK with context and configuration.
+     *
+     * When [FunnelMobConfiguration.autoStart] is `true` (the default), this
+     * method also calls [start] to begin attribution, the flush timer, the
+     * lifecycle observer, and Install/ActivateApp events.
+     *
+     * When [FunnelMobConfiguration.autoStart] is `false`, this method only
+     * wires up internal state (no network activity, no event tracking).
+     * Call [start] explicitly once you have obtained any user consent
+     * required by applicable law.
      *
      * @param context Application context
      * @param configuration SDK configuration
@@ -100,13 +127,46 @@ object FunnelMob {
         Logger.info("FunnelMob initialized")
 
         isInitialized = true
-        val isFirstLaunch = loadAttribution() == null
 
         restoreUserId()
-        startSession()
         loadCachedConfig()
+
+        if (configuration.autoStart) {
+            start()
+        } else {
+            Logger.info("autoStart disabled — call FunnelMob.start() when ready")
+        }
+    }
+
+    /**
+     * Start the SDK's active components: attribution session, remote config
+     * fetch, flush timer, lifecycle observer, and the automatic
+     * Install/ActivateApp events.
+     *
+     * Called automatically by [initialize] when
+     * [FunnelMobConfiguration.autoStart] is `true` (the default). When
+     * `autoStart` is `false`, the host application must call [start]
+     * explicitly — typically after obtaining user consent (GDPR, CCPA, etc.).
+     *
+     * By calling [start], you represent that you have obtained any user
+     * consent required by applicable law for the data the SDK will collect
+     * and transmit.
+     */
+    @JvmStatic
+    fun start() {
+        check(isInitialized) { "FunnelMob SDK not initialized. Call initialize() first." }
+        if (isStarted) {
+            Logger.warning("FunnelMob already started")
+            return
+        }
+        isStarted = true
+
+        val config = configuration!!
+        val isFirstLaunch = loadAttribution() == null
+
+        startSession()
         fetchRemoteConfig()
-        startFlushTimer(configuration)
+        startFlushTimer(config)
         registerLifecycleObserver()
 
         if (isFirstLaunch) {
@@ -234,6 +294,11 @@ object FunnelMob {
 
         if (!isEnabled) {
             Logger.debug("Tracking disabled, ignoring event: $name")
+            return
+        }
+
+        if (!isStarted) {
+            Logger.debug("FunnelMob not started, ignoring event: $name")
             return
         }
 
@@ -468,26 +533,7 @@ object FunnelMob {
 
     private fun requestAttribution(referrerToken: String?) {
         val config = configuration ?: return
-
-        val context = deviceInfo.toContext()
-        val payload = JSONObject().apply {
-            put("device_id", deviceInfo.deviceId)
-            put("session_id", UUID.randomUUID().toString())
-            put("platform", "android")
-            put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                timeZone = java.util.TimeZone.getTimeZone("UTC")
-            }.format(java.util.Date()))
-            put("is_first_session", true)
-            referrerToken?.let { put("referrer_token", it) }
-            put("context", JSONObject().apply {
-                put("os_version", context.osVersion)
-                put("device_model", context.deviceModel)
-                put("locale", context.locale)
-                put("timezone", context.timezone)
-                put("screen_width", context.screenWidth)
-                put("screen_height", context.screenHeight)
-            })
-        }
+        val payload = buildSessionPayload(isFirstSession = true, referrerToken = referrerToken)
 
         networkClient.sendSession(payload, config) { result ->
             result.onSuccess { json ->
@@ -506,6 +552,163 @@ object FunnelMob {
                 notifyCallbacks(null)
             }
         }
+    }
+
+    /// Build a `/v1/session` payload populated with the current in-memory
+    /// identifier set. Shared between the first-session attribution path
+    /// and the debounced re-fire path so both produce identically-shaped
+    /// payloads.
+    private fun buildSessionPayload(
+        isFirstSession: Boolean,
+        referrerToken: String? = null,
+    ): JSONObject {
+        val context = deviceInfo.toContext()
+        val timestamp = java.text.SimpleDateFormat(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            java.util.Locale.US,
+        ).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(java.util.Date())
+
+        return JSONObject().apply {
+            put("device_id", deviceInfo.deviceId)
+            put("session_id", UUID.randomUUID().toString())
+            put("platform", "android")
+            put("timestamp", timestamp)
+            put("is_first_session", isFirstSession)
+            referrerToken?.let { put("referrer_token", it) }
+            gaid?.let { put("gaid", it) }
+            hashedEmail?.let { put("email_sha256", it) }
+            hashedPhone?.let { put("phone_sha256", it) }
+            hashedExternalId?.let { put("external_id_sha256", it) }
+            put("context", JSONObject().apply {
+                put("os_version", context.osVersion)
+                put("device_model", context.deviceModel)
+                put("locale", context.locale)
+                put("timezone", context.timezone)
+                put("screen_width", context.screenWidth)
+                put("screen_height", context.screenHeight)
+            })
+        }
+    }
+
+    // MARK: - User identifier setters
+
+    /**
+     * Set the device's Google Advertising ID. Pass the value the host read
+     * from `AdvertisingIdClient.getAdvertisingIdInfo(...)` after the user
+     * granted consent. Pass `null` to remove the value from the SDK's
+     * in-memory map.
+     *
+     * The SDK never reads GAID itself — calling this method is the host's
+     * affirmative representation that consent was granted.
+     */
+    @JvmStatic
+    fun setGAID(gaid: String?) {
+        this.gaid = gaid
+        Logger.debug("GAID ${if (gaid == null) "cleared" else "set"}")
+        markIdentifierDirty()
+    }
+
+    /**
+     * Set the SHA256-hex hash of the user's email (lowercase + trim, then
+     * SHA256). Forwarded to Meta CAPI as `user_data.em` and TikTok Events
+     * as `user.email`. The SDK never sees the raw value — the host is
+     * responsible for normalization and hashing.
+     */
+    @JvmStatic
+    fun setHashedEmail(sha256: String?) {
+        this.hashedEmail = sha256
+        Logger.debug("Hashed email ${if (sha256 == null) "cleared" else "set"}")
+        markIdentifierDirty()
+    }
+
+    /**
+     * Set the SHA256-hex hash of the user's phone number (E.164 format
+     * pre-hash, e.g. `+12025551234`).
+     */
+    @JvmStatic
+    fun setHashedPhone(sha256: String?) {
+        this.hashedPhone = sha256
+        Logger.debug("Hashed phone ${if (sha256 == null) "cleared" else "set"}")
+        markIdentifierDirty()
+    }
+
+    /**
+     * Set the SHA256-hex hash of an external user identifier (CRM ID,
+     * auth user ID).
+     */
+    @JvmStatic
+    fun setHashedExternalId(sha256: String?) {
+        this.hashedExternalId = sha256
+        Logger.debug("Hashed external_id ${if (sha256 == null) "cleared" else "set"}")
+        markIdentifierDirty()
+    }
+
+    /**
+     * Bypass the 1-second debounce and immediately fire a `/v1/session`
+     * re-fire if any identifier has changed since the last successful
+     * POST. No-op if not started or not dirty. Useful for tests and for
+     * hosts that want a synchronous confirmation point.
+     */
+    @JvmStatic
+    fun flushIdentifiers() {
+        identifierHandler?.let { handler ->
+            identifierDebounceRunnable?.let { handler.removeCallbacks(it) }
+        }
+        triggerIdentifierReFire()
+    }
+
+    // MARK: - Identifier debounce + re-fire (private)
+
+    /**
+     * Mark the in-memory identifier set as dirty and schedule a debounced
+     * re-fire. Called by every setter. No-op while `isStarted == false`
+     * (the values are buffered and ride on the first `start()` POST) or
+     * while a re-fire is already in flight (handled on POST completion).
+     */
+    private fun markIdentifierDirty() {
+        isIdentifierDirty = true
+        if (!isStarted) return
+        if (isReFireInFlight) return
+        scheduleDebounce()
+    }
+
+    private fun scheduleDebounce() {
+        val handler = identifierHandler ?: Handler(Looper.getMainLooper()).also {
+            identifierHandler = it
+        }
+        identifierDebounceRunnable?.let { handler.removeCallbacks(it) }
+        val runnable = Runnable { triggerIdentifierReFire() }
+        identifierDebounceRunnable = runnable
+        handler.postDelayed(runnable, IDENTIFIER_DEBOUNCE_MS)
+    }
+
+    private fun triggerIdentifierReFire() {
+        if (!isStarted) return
+        if (!isIdentifierDirty) return
+        val config = configuration ?: return
+
+        isReFireInFlight = true
+        isIdentifierDirty = false
+
+        val payload = buildSessionPayload(isFirstSession = false)
+
+        Thread {
+            networkClient.sendSession(payload, config) { result ->
+                isReFireInFlight = false
+                result.onSuccess {
+                    Logger.debug("Identifier re-fire succeeded")
+                }.onFailure { error ->
+                    // Restore dirty so foreground hook + next setter recover.
+                    isIdentifierDirty = true
+                    Logger.warning("Identifier re-fire failed: ${error.message}")
+                }
+                if (isIdentifierDirty) {
+                    Handler(Looper.getMainLooper()).post { scheduleDebounce() }
+                }
+            }
+        }.start()
     }
 
     private fun notifyCallbacks(result: AttributionResult?) {
@@ -554,6 +757,9 @@ object FunnelMob {
             ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
                     flush()
+                    // Recover any pending identifier re-fire that lost a previous
+                    // POST attempt while the app was backgrounded.
+                    flushIdentifiers()
                 }
 
                 override fun onStop(owner: LifecycleOwner) {

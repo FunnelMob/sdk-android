@@ -26,7 +26,22 @@ data class FunnelMobConfiguration(
      * time; `NetworkClient.baseUrl` also trims at use-time so direct
      * data-class construction with a trailing slash still works.
      */
-    val customUrl: String? = null
+    val customUrl: String? = null,
+
+    /**
+     * Whether the SDK starts its active components (attribution session,
+     * flush timer, lifecycle observer, automatic Install/ActivateApp events,
+     * remote config fetch) immediately when [FunnelMob.initialize] is called.
+     *
+     * Defaults to `true`. Set to `false` when you need to defer the SDK's
+     * network and event activity until you have obtained user consent
+     * (e.g. GDPR). When `false`, you must call [FunnelMob.start] after
+     * consent is granted.
+     *
+     * By calling [FunnelMob.start] you represent that you have obtained
+     * any user consent required by applicable law.
+     */
+    val autoStart: Boolean = true
 ) {
 
     /**
@@ -51,6 +66,7 @@ data class FunnelMobConfiguration(
         private var flushIntervalMs = 30_000L
         private var maxBatchSize = 100
         private var customUrl: String? = null
+        private var autoStart = true
 
         fun logLevel(level: LogLevel) = apply { logLevel = level }
 
@@ -71,12 +87,20 @@ data class FunnelMobConfiguration(
             customUrl = url?.trimEnd('/')?.takeIf { it.isNotEmpty() }
         }
 
+        /**
+         * Configure whether the SDK starts automatically on
+         * [FunnelMob.initialize]. Pass `false` to defer all network activity
+         * and event tracking until [FunnelMob.start] is called.
+         */
+        fun autoStart(enabled: Boolean) = apply { autoStart = enabled }
+
         fun build() = FunnelMobConfiguration(
             apiKey = apiKey,
             logLevel = logLevel,
             flushIntervalMs = flushIntervalMs,
             maxBatchSize = maxBatchSize,
-            customUrl = customUrl
+            customUrl = customUrl,
+            autoStart = autoStart
         )
     }
 }
