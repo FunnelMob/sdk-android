@@ -76,8 +76,13 @@ object FunnelMob {
     @Volatile private var hashedEmail: String? = null
     @Volatile private var hashedPhone: String? = null
     @Volatile private var hashedExternalId: String? = null
-    @Volatile private var isIdentifierDirty = false
-    @Volatile private var isReFireInFlight = false
+    // `identifierLock` guards isIdentifierDirty, isReFireInFlight,
+    // identifierHandler, and identifierDebounceRunnable so concurrent setters
+    // from arbitrary threads can't double-init the Handler or stomp the
+    // pending Runnable bookkeeping.
+    private val identifierLock = Any()
+    private var isIdentifierDirty = false
+    private var isReFireInFlight = false
     private var identifierHandler: Handler? = null
     private var identifierDebounceRunnable: Runnable? = null
     private const val IDENTIFIER_DEBOUNCE_MS = 1000L
@@ -163,6 +168,16 @@ object FunnelMob {
 
         val config = configuration!!
         val isFirstLaunch = loadAttribution() == null
+
+        // Initialize the identifier handler eagerly. Setters that fired
+        // before start() set the dirty bit without scheduling; the
+        // first-session POST below carries those values, and any later
+        // setter goes through scheduleDebounce on this single Handler.
+        synchronized(identifierLock) {
+            if (identifierHandler == null) {
+                identifierHandler = Handler(Looper.getMainLooper())
+            }
+        }
 
         startSession()
         fetchRemoteConfig()
@@ -533,6 +548,18 @@ object FunnelMob {
 
     private fun requestAttribution(referrerToken: String?) {
         val config = configuration ?: return
+
+        // Snapshot and clear the dirty bit before sending. This POST carries
+        // current identifiers, so a successful round-trip means we've already
+        // delivered them; clearing here avoids a redundant re-fire on the
+        // first foreground hook. If a setter races during the in-flight POST,
+        // it sets dirty back to true (and the in-flight check in
+        // markIdentifierDirty defers scheduling until completion).
+        val wasDirty: Boolean
+        synchronized(identifierLock) {
+            wasDirty = isIdentifierDirty
+            isIdentifierDirty = false
+        }
         val payload = buildSessionPayload(isFirstSession = true, referrerToken = referrerToken)
 
         networkClient.sendSession(payload, config) { result ->
@@ -550,6 +577,10 @@ object FunnelMob {
             }.onFailure { error ->
                 Logger.error("Attribution request failed: ${error.message}")
                 notifyCallbacks(null)
+                // Restore dirty so a foreground hook / next setter re-fires.
+                synchronized(identifierLock) {
+                    if (wasDirty) isIdentifierDirty = true
+                }
             }
         }
     }
@@ -653,8 +684,13 @@ object FunnelMob {
      */
     @JvmStatic
     fun flushIdentifiers() {
-        identifierHandler?.let { handler ->
-            identifierDebounceRunnable?.let { handler.removeCallbacks(it) }
+        synchronized(identifierLock) {
+            val handler = identifierHandler
+            val runnable = identifierDebounceRunnable
+            if (handler != null && runnable != null) {
+                handler.removeCallbacks(runnable)
+            }
+            identifierDebounceRunnable = null
         }
         triggerIdentifierReFire()
     }
@@ -668,16 +704,17 @@ object FunnelMob {
      * while a re-fire is already in flight (handled on POST completion).
      */
     private fun markIdentifierDirty() {
-        isIdentifierDirty = true
-        if (!isStarted) return
-        if (isReFireInFlight) return
-        scheduleDebounce()
+        synchronized(identifierLock) {
+            isIdentifierDirty = true
+            if (!isStarted) return
+            if (isReFireInFlight) return
+            scheduleDebounceLocked()
+        }
     }
 
-    private fun scheduleDebounce() {
-        val handler = identifierHandler ?: Handler(Looper.getMainLooper()).also {
-            identifierHandler = it
-        }
+    /** Must be called holding `identifierLock`. */
+    private fun scheduleDebounceLocked() {
+        val handler = identifierHandler ?: return
         identifierDebounceRunnable?.let { handler.removeCallbacks(it) }
         val runnable = Runnable { triggerIdentifierReFire() }
         identifierDebounceRunnable = runnable
@@ -685,27 +722,38 @@ object FunnelMob {
     }
 
     private fun triggerIdentifierReFire() {
-        if (!isStarted) return
-        if (!isIdentifierDirty) return
-        val config = configuration ?: return
-
-        isReFireInFlight = true
-        isIdentifierDirty = false
-
-        val payload = buildSessionPayload(isFirstSession = false)
+        val config: FunnelMobConfiguration
+        val payload: JSONObject
+        synchronized(identifierLock) {
+            if (!isStarted) return
+            if (!isIdentifierDirty) return
+            config = configuration ?: return
+            isReFireInFlight = true
+            isIdentifierDirty = false
+            identifierDebounceRunnable = null
+            payload = buildSessionPayload(isFirstSession = false)
+        }
 
         Thread {
             networkClient.sendSession(payload, config) { result ->
-                isReFireInFlight = false
-                result.onSuccess {
-                    Logger.debug("Identifier re-fire succeeded")
-                }.onFailure { error ->
-                    // Restore dirty so foreground hook + next setter recover.
-                    isIdentifierDirty = true
-                    Logger.warning("Identifier re-fire failed: ${error.message}")
-                }
-                if (isIdentifierDirty) {
-                    Handler(Looper.getMainLooper()).post { scheduleDebounce() }
+                synchronized(identifierLock) {
+                    isReFireInFlight = false
+                    result.onSuccess {
+                        Logger.debug("Identifier re-fire succeeded")
+                    }.onFailure { error ->
+                        // Restore dirty so foreground hook + next setter recover.
+                        isIdentifierDirty = true
+                        Logger.warning("Identifier re-fire failed: ${error.message}")
+                    }
+                    if (isIdentifierDirty) {
+                        identifierHandler?.post {
+                            synchronized(identifierLock) {
+                                if (isIdentifierDirty && !isReFireInFlight) {
+                                    scheduleDebounceLocked()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }.start()
