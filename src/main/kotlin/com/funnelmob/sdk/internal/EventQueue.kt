@@ -54,6 +54,19 @@ internal class EventQueue(context: Context) {
         get() = lock.withLock { events.size }
 
     /**
+     * Drop every queued event from memory and persistent storage.
+     * Used when the user revokes consent — GDPR requires the SDK to
+     * stop processing further data, including data already in flight
+     * to the network layer.
+     */
+    fun clear() {
+        lock.withLock {
+            events.clear()
+            prefs.edit().remove(KEY_EVENTS).apply()
+        }
+    }
+
+    /**
      * Flush all events
      */
     fun flush(client: NetworkClient, configuration: FunnelMobConfiguration, deviceId: String, userId: String? = null) {

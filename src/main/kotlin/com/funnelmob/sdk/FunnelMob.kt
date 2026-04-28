@@ -76,6 +76,12 @@ object FunnelMob {
     @Volatile private var hashedEmail: String? = null
     @Volatile private var hashedPhone: String? = null
     @Volatile private var hashedExternalId: String? = null
+
+    // Consent state. `null` until the host calls setConsent(). When null,
+    // the SDK tracks normally (default — opt-in compliance). When the
+    // current consent blocks dispatch, trackEvent() drops new events,
+    // flush() is a no-op, and identifier/identify re-fires are suppressed.
+    @Volatile private var consent: FunnelMobConsent? = null
     // `identifierLock` guards isIdentifierDirty, isReFireInFlight,
     // identifierHandler, and identifierDebounceRunnable so concurrent setters
     // from arbitrary threads can't double-init the Handler or stomp the
@@ -317,6 +323,11 @@ object FunnelMob {
             return
         }
 
+        if (consent?.blocksDispatch == true) {
+            Logger.debug("Consent blocks dispatch, dropping event: $name")
+            return
+        }
+
         // Validate event name
         val validatedName = validateEventName(name)
         if (validatedName == null) {
@@ -352,6 +363,10 @@ object FunnelMob {
     fun flush() {
         if (!isInitialized) return
         val config = configuration ?: return
+        if (consent?.blocksDispatch == true) {
+            Logger.debug("Consent blocks dispatch, skipping flush")
+            return
+        }
         eventQueue.flush(networkClient, config, deviceInfo.deviceId, userId)
     }
 
@@ -433,6 +448,10 @@ object FunnelMob {
     private fun sendIdentify() {
         val config = configuration ?: return
         val uid = userId ?: return
+        if (consent?.blocksDispatch == true) {
+            Logger.debug("Consent blocks dispatch, skipping identify")
+            return
+        }
 
         Thread {
             val context = deviceInfo.toContext()
@@ -548,6 +567,10 @@ object FunnelMob {
 
     private fun requestAttribution(referrerToken: String?) {
         val config = configuration ?: return
+        if (consent?.blocksDispatch == true) {
+            Logger.debug("Consent blocks dispatch, skipping initial session POST")
+            return
+        }
 
         // Snapshot and clear the dirty bit before sending. This POST carries
         // current identifiers, so a successful round-trip means we've already
@@ -612,6 +635,7 @@ object FunnelMob {
             hashedEmail?.let { put("email_sha256", it) }
             hashedPhone?.let { put("phone_sha256", it) }
             hashedExternalId?.let { put("external_id_sha256", it) }
+            consent?.let { put("consent", it.toJson()) }
             put("context", JSONObject().apply {
                 put("os_version", context.osVersion)
                 put("device_model", context.deviceModel)
@@ -623,6 +647,13 @@ object FunnelMob {
         }
     }
 
+    private fun FunnelMobConsent.toJson(): JSONObject = JSONObject().apply {
+        put("is_user_subject_to_gdpr", isUserSubjectToGDPR)
+        hasConsentForDataUsage?.let { put("has_consent_for_data_usage", it) }
+        hasConsentForAdsPersonalization?.let { put("has_consent_for_ads_personalization", it) }
+        hasConsentForAdStorage?.let { put("has_consent_for_ad_storage", it) }
+    }
+
     // MARK: - User identifier setters
 
     /**
@@ -631,13 +662,24 @@ object FunnelMob {
      * granted consent. Pass `null` to remove the value from the SDK's
      * in-memory map.
      *
+     * If the user enabled "Limit Ad Tracking" / "Delete advertising ID"
+     * in Android settings, pass `isLimitAdTrackingEnabled = true` and the
+     * SDK will drop the GAID even if a value was supplied — this prevents
+     * an upstream call site that didn't check the LAT flag from leaking
+     * the identifier.
+     *
      * The SDK never reads GAID itself — calling this method is the host's
      * affirmative representation that consent was granted.
      */
     @JvmStatic
-    fun setGAID(gaid: String?) {
-        this.gaid = gaid
-        Logger.debug("GAID ${if (gaid == null) "cleared" else "set"}")
+    @JvmOverloads
+    fun setGAID(gaid: String?, isLimitAdTrackingEnabled: Boolean = false) {
+        val effective = if (isLimitAdTrackingEnabled) null else gaid
+        this.gaid = effective
+        Logger.debug(
+            "GAID ${if (effective == null) "cleared" else "set"}" +
+                if (isLimitAdTrackingEnabled) " (limit-ad-tracking enabled)" else ""
+        )
         markIdentifierDirty()
     }
 
@@ -673,6 +715,37 @@ object FunnelMob {
     fun setHashedExternalId(sha256: String?) {
         this.hashedExternalId = sha256
         Logger.debug("Hashed external_id ${if (sha256 == null) "cleared" else "set"}")
+        markIdentifierDirty()
+    }
+
+    /**
+     * Record the user's GDPR / DMA consent decision.
+     *
+     * When `consent.blocksDispatch == true` (GDPR applies and data-usage
+     * consent was denied), the SDK stops dispatching new events and
+     * purges the local queue. Otherwise, the consent state is attached
+     * to the next session payload and a re-fire is scheduled so the
+     * backend learns the new state without waiting for a natural
+     * session boundary.
+     *
+     * Calling this method is opt-in. Hosts that never call it get the
+     * SDK's default behavior (track everything).
+     */
+    @JvmStatic
+    fun setConsent(consent: FunnelMobConsent) {
+        this.consent = consent
+        Logger.info(
+            "Consent updated (gdpr=${consent.isUserSubjectToGDPR}, dataUsage=${consent.hasConsentForDataUsage})"
+        )
+
+        if (consent.blocksDispatch) {
+            if (::eventQueue.isInitialized) {
+                eventQueue.clear()
+            }
+            Logger.info("Consent blocks dispatch — local event queue purged")
+            return
+        }
+
         markIdentifierDirty()
     }
 
@@ -727,6 +800,12 @@ object FunnelMob {
         synchronized(identifierLock) {
             if (!isStarted) return
             if (!isIdentifierDirty) return
+            if (consent?.blocksDispatch == true) {
+                Logger.debug("Consent blocks dispatch, skipping session re-fire")
+                isIdentifierDirty = false
+                identifierDebounceRunnable = null
+                return
+            }
             config = configuration ?: return
             isReFireInFlight = true
             isIdentifierDirty = false
