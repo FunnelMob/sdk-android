@@ -67,6 +67,19 @@ internal class EventQueue(context: Context) {
     }
 
     /**
+     * Prepend a previously-dequeued batch back to the queue after a
+     * retryable send failure. Preserves event ordering: the failed
+     * batch retries first, before any newer events tracked while the
+     * in-flight POST was outstanding.
+     */
+    fun requeue(batch: List<Event>) {
+        lock.withLock {
+            events.addAll(0, batch)
+            persistEvents()
+        }
+    }
+
+    /**
      * Flush all events
      */
     fun flush(client: NetworkClient, configuration: FunnelMobConfiguration, deviceId: String, userId: String? = null) {
@@ -78,7 +91,15 @@ internal class EventQueue(context: Context) {
             result.onSuccess {
                 Logger.debug("Events sent successfully")
             }.onFailure { error ->
-                Logger.error("Failed to send events: ${error.message}")
+                // Treat unclassified errors as retryable (defensive default —
+                // most non-NetworkError throwables are transient runtime issues).
+                val retryable = (error as? NetworkError)?.isRetryable ?: true
+                if (retryable) {
+                    requeue(batch)
+                    Logger.warning("Re-queued ${batch.size} events: ${error.message}")
+                } else {
+                    Logger.error("Dropped ${batch.size} events (non-retryable): ${error.message}")
+                }
             }
         }
     }
