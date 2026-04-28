@@ -95,6 +95,16 @@ object FunnelMob {
 
     private const val ATTRIBUTION_PREFS = "funnelmob_attribution"
     private const val KEY_ATTRIBUTION_RESULT = "attribution_result"
+    /**
+     * Persistent boolean marker used to decide whether the SDK should fire
+     * the one-time `Install` + `ActivateApp(is_first_session: true)` events
+     * on this cold start. Set after the first launch's events have been
+     * enqueued so subsequent launches don't re-fire them. Stored alongside
+     * the attribution result in [ATTRIBUTION_PREFS] so device-lifecycle
+     * state lives in one place. Wipes on app uninstall / data clear, which
+     * is the correct behavior — reinstall = new install.
+     */
+    private const val KEY_FIRST_LAUNCH_COMPLETED = "first_launch_completed"
     private const val USER_PREFS = "funnelmob_user"
     private const val KEY_USER_ID = "user_id"
     private const val CONFIG_PREFS = "funnelmob_config"
@@ -173,7 +183,7 @@ object FunnelMob {
         isStarted = true
 
         val config = configuration!!
-        val isFirstLaunch = loadAttribution() == null
+        val isFirstLaunch = !attributionPrefs.getBoolean(KEY_FIRST_LAUNCH_COMPLETED, false)
 
         // Initialize the identifier handler eagerly. Setters that fired
         // before start() set the dirty bit without scheduling; the
@@ -185,7 +195,7 @@ object FunnelMob {
             }
         }
 
-        startSession()
+        startSession(isFirstLaunch = isFirstLaunch)
         fetchRemoteConfig()
         startFlushTimer(config)
         registerLifecycleObserver()
@@ -195,6 +205,12 @@ object FunnelMob {
             trackActivateApp(
                 FunnelMobEventParameters.build { set("is_first_session", true) }
             )
+            // Set the marker AFTER the first-launch events are enqueued.
+            // Semantic B: if consent blocks dispatch, the events are dropped
+            // at the consent gate but the marker is still set, so Install
+            // never fires again — matches the SDK's "consent denied = nothing
+            // tracked, ever" model.
+            attributionPrefs.edit().putBoolean(KEY_FIRST_LAUNCH_COMPLETED, true).apply()
         } else {
             trackActivateApp()
         }
@@ -499,20 +515,33 @@ object FunnelMob {
         }
     }
 
-    private fun startSession() {
-        // Check for existing attribution
+    /**
+     * Send the per-cold-start `/v1/session` ping and (on first launch only)
+     * receive the attribution result from the backend. Cached attribution
+     * still drives the immediate callback fire — only the network POST is
+     * gated by [isFirstLaunch], never by attribution presence.
+     */
+    private fun startSession(isFirstLaunch: Boolean) {
+        // Notify callbacks immediately when we already have a stored
+        // attribution result, so the host's onAttribution handler fires
+        // without waiting for the network round-trip. This runs even on
+        // subsequent cold starts — the cached attribution remains valid for
+        // the device's lifetime.
         val stored = loadAttribution()
         if (stored != null) {
             attributionId = stored.attributionId
             Logger.debug("Loaded existing attribution")
             notifyCallbacks(stored)
-            return
         }
 
-        // First session — read Install Referrer then request attribution
+        // Always POST /v1/session on cold start. The backend uses the
+        // is_first_session flag to decide whether to run the (expensive)
+        // attribution engine; subsequent sessions just refresh device
+        // identifiers and bump user_profile.last_seen_at. Read the install
+        // referrer only on the first launch — it's a one-shot signal.
         Thread {
-            val referrerToken = readInstallReferrer()
-            requestAttribution(referrerToken)
+            val referrerToken = if (isFirstLaunch) readInstallReferrer() else null
+            requestSession(isFirstLaunch = isFirstLaunch, referrerToken = referrerToken)
         }.start()
     }
 
@@ -565,10 +594,10 @@ object FunnelMob {
         return null
     }
 
-    private fun requestAttribution(referrerToken: String?) {
+    private fun requestSession(isFirstLaunch: Boolean, referrerToken: String?) {
         val config = configuration ?: return
         if (consent?.blocksDispatch == true) {
-            Logger.debug("Consent blocks dispatch, skipping initial session POST")
+            Logger.debug("Consent blocks dispatch, skipping session POST")
             return
         }
 
@@ -583,10 +612,14 @@ object FunnelMob {
             wasDirty = isIdentifierDirty
             isIdentifierDirty = false
         }
-        val payload = buildSessionPayload(isFirstSession = true, referrerToken = referrerToken)
+        val payload = buildSessionPayload(isFirstSession = isFirstLaunch, referrerToken = referrerToken)
 
         networkClient.sendSession(payload, config) { result ->
             result.onSuccess { json ->
+                // The backend only runs attribution for is_first_session=true
+                // requests. On subsequent cold starts, the response contains
+                // no attribution result and there's nothing to save or notify.
+                if (!isFirstLaunch) return@onSuccess
                 val attrJson = json?.optJSONObject("attribution")
                 if (attrJson != null) {
                     val attribution = AttributionResult.fromJson(attrJson)
@@ -598,8 +631,10 @@ object FunnelMob {
                     notifyCallbacks(null)
                 }
             }.onFailure { error ->
-                Logger.error("Attribution request failed: ${error.message}")
-                notifyCallbacks(null)
+                Logger.error("Session request failed: ${error.message}")
+                if (isFirstLaunch) {
+                    notifyCallbacks(null)
+                }
                 // Restore dirty so a foreground hook / next setter re-fires.
                 synchronized(identifierLock) {
                     if (wasDirty) isIdentifierDirty = true
