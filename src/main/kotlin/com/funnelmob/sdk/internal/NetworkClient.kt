@@ -280,4 +280,18 @@ sealed class NetworkError : Exception() {
     data class ServerError(val code: Int) : NetworkError()
     data class UnknownError(val code: Int) : NetworkError()
     data class NetworkException(override val cause: Throwable) : NetworkError()
+
+    /**
+     * Whether the failure is worth retrying. Transient transport-layer
+     * errors (network exceptions, server 5xx, 429 rate-limit, unknown
+     * status codes) are retryable; client-side errors (401, 4xx) are
+     * permanent and would just fail again on retry. Used by
+     * [com.funnelmob.sdk.internal.EventQueue.flush] to decide whether
+     * to re-queue a failed batch or drop it.
+     */
+    val isRetryable: Boolean
+        get() = when (this) {
+            is NetworkException, is ServerError, is RateLimited, is UnknownError -> true
+            is Unauthorized, is ClientError -> false
+        }
 }
