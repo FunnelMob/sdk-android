@@ -11,7 +11,14 @@ internal data class Event(
     val timestamp: String,
     val revenue: EventRevenue?,
     val parameters: Map<String, Any>?,
-    val attributionId: String? = null
+    val attributionId: String? = null,
+    /**
+     * How many times this event's batch has failed and been re-queued.
+     * Set to 0 on enqueue, incremented on every retryable failure. Once
+     * any event in a batch exceeds [EventQueue.MAX_RETRY_ATTEMPTS], the
+     * whole batch is dropped to keep a poison-pill from looping forever.
+     */
+    val attemptCount: Int = 0
 ) {
 
     fun toJson(): JSONObject {
@@ -34,6 +41,8 @@ internal data class Event(
             attributionId?.let {
                 put("attribution_id", it)
             }
+
+            put("attempt_count", attemptCount)
         }
     }
 
@@ -55,7 +64,8 @@ internal data class Event(
                 parameters = paramsJson?.let { obj ->
                     obj.keys().asSequence().associateWith { key -> obj.get(key) }
                 },
-                attributionId = json.optString("attribution_id", null)
+                attributionId = json.optString("attribution_id", null),
+                attemptCount = json.optInt("attempt_count", 0)
             )
         }
     }
