@@ -94,11 +94,18 @@ internal class EventQueue(context: Context) {
                 // Treat unclassified errors as retryable (defensive default —
                 // most non-NetworkError throwables are transient runtime issues).
                 val retryable = (error as? NetworkError)?.isRetryable ?: true
-                if (retryable) {
+                if (!retryable) {
+                    Logger.error("Dropped ${batch.size} events (non-retryable): ${error.message}")
+                    return@onFailure
+                }
+                // Retry queue is gated behind a config flag because the backend
+                // `events` table lacks `event_id` dedup. With dedup off, retrying
+                // a POST whose response was lost duplicates rows. Default off.
+                if (configuration.enableRetryQueue) {
                     requeue(batch)
                     Logger.warning("Re-queued ${batch.size} events: ${error.message}")
                 } else {
-                    Logger.error("Dropped ${batch.size} events (non-retryable): ${error.message}")
+                    Logger.error("Dropped ${batch.size} events (retryable, but enableRetryQueue=false): ${error.message}")
                 }
             }
         }

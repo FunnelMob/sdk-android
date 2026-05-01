@@ -41,7 +41,22 @@ data class FunnelMobConfiguration(
      * By calling [FunnelMob.start] you represent that you have obtained
      * any user consent required by applicable law.
      */
-    val autoStart: Boolean = true
+    val autoStart: Boolean = true,
+
+    /**
+     * Whether the EventQueue re-queues a batch on retryable send failures
+     * (5xx, 429, generic network errors) instead of dropping it. Defaults
+     * to `false`.
+     *
+     * Why default-off: the backend `events` table is currently a plain
+     * `MergeTree` (no `event_id` dedup). Until it migrates to
+     * `ReplacingMergeTree(inserted_at)` keyed on `event_id`, a successful
+     * POST whose response is lost (TCP RST after server commit, gateway
+     * timeout) becomes a duplicate row on retry — and revenue events
+     * would be double-counted. Set to `true` only in environments where
+     * you accept duplicates, or once backend dedup ships.
+     */
+    val enableRetryQueue: Boolean = false
 ) {
 
     /**
@@ -67,6 +82,7 @@ data class FunnelMobConfiguration(
         private var maxBatchSize = 100
         private var customUrl: String? = null
         private var autoStart = true
+        private var enableRetryQueue = false
 
         fun logLevel(level: LogLevel) = apply { logLevel = level }
 
@@ -94,13 +110,23 @@ data class FunnelMobConfiguration(
          */
         fun autoStart(enabled: Boolean) = apply { autoStart = enabled }
 
+        /**
+         * Enable the retry queue: re-queue batches that fail with
+         * retryable errors (5xx / 429 / network) instead of dropping
+         * them. Default `false` until backend `events` table grows
+         * `event_id` dedup — see [FunnelMobConfiguration.enableRetryQueue]
+         * for rationale.
+         */
+        fun enableRetryQueue(enabled: Boolean) = apply { enableRetryQueue = enabled }
+
         fun build() = FunnelMobConfiguration(
             apiKey = apiKey,
             logLevel = logLevel,
             flushIntervalMs = flushIntervalMs,
             maxBatchSize = maxBatchSize,
             customUrl = customUrl,
-            autoStart = autoStart
+            autoStart = autoStart,
+            enableRetryQueue = enableRetryQueue
         )
     }
 }
