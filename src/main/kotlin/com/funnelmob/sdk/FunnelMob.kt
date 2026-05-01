@@ -537,12 +537,21 @@ object FunnelMob {
         // Always POST /v1/session on cold start. The backend uses the
         // is_first_session flag to decide whether to run the (expensive)
         // attribution engine; subsequent sessions just refresh device
-        // identifiers and bump user_profile.last_seen_at. Read the install
-        // referrer only on the first launch — it's a one-shot signal.
-        Thread {
-            val referrerToken = if (isFirstLaunch) readInstallReferrer() else null
-            requestSession(isFirstLaunch = isFirstLaunch, referrerToken = referrerToken)
-        }.start()
+        // identifiers and bump user_profile.last_seen_at.
+        if (isFirstLaunch) {
+            // Read the install referrer only on the first launch — it's
+            // a one-shot signal and the InstallReferrerClient call is
+            // blocking, so it must run off the caller's thread.
+            Thread {
+                val referrerToken = readInstallReferrer()
+                requestSession(isFirstLaunch = true, referrerToken = referrerToken)
+            }.start()
+        } else {
+            // No referrer read needed; NetworkClient.sendSession spawns
+            // its own internal thread for the HTTP POST, so no outer
+            // wrapper is required here.
+            requestSession(isFirstLaunch = false, referrerToken = null)
+        }
     }
 
     private fun readInstallReferrer(): String? {
