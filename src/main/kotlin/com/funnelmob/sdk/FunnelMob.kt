@@ -480,6 +480,8 @@ object FunnelMob {
                 }.format(java.util.Date()))
                 userProperties?.let { put("user_properties", JSONObject(it as Map<*, *>)) }
                 put("context", JSONObject().apply {
+                    put("app_version", context.appVersion)
+                    put("os_name", context.osName)
                     put("os_version", context.osVersion)
                     put("device_model", context.deviceModel)
                     put("locale", context.locale)
@@ -681,6 +683,8 @@ object FunnelMob {
             hashedExternalId?.let { put("external_id_sha256", it) }
             consent?.let { put("consent", it.toJson()) }
             put("context", JSONObject().apply {
+                put("app_version", context.appVersion)
+                put("os_name", context.osName)
                 put("os_version", context.osVersion)
                 put("device_model", context.deviceModel)
                 put("locale", context.locale)
